@@ -1,0 +1,7 @@
+# Hold still for MS milliseconds (Maestro has no sleep).
+appId: host.exp.Exponent
+---
+- extendedWaitUntil:
+    visible: "zz-never-on-screen-zz"
+    timeout: ${MS}
+    optional: true

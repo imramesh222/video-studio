@@ -1,0 +1,516 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: #000; font-family: Montserrat, sans-serif; font-weight: 900; }
+  canvas { position: absolute; inset: 0; }
+  .ov { position: absolute; inset: 0; pointer-events: none; }
+  /* Captions sit in the middle-lower part; the top 10% and bottom 20% stay clear for the app's buttons. */
+  #cap { position: absolute; left: 50px; right: 50px; top: 1160px; text-align: center; font-size: 86px; line-height: 1.08; color: #fff; text-transform: uppercase;
+    -webkit-text-stroke: 18px #14161b; paint-order: stroke fill; }
+  #cap .on { color: #ffe14a; }
+  #cap.drone { color: #ffb3ad; }
+  #bank { position: absolute; top: 204px; left: 50%; display: flex; align-items: center; gap: 20px; padding: 14px 36px 14px 30px; border-radius: 60px; background: #fff;
+    box-shadow: 0 10px 24px rgba(0,0,0,.25); white-space: nowrap; }
+  #bank small { font-size: 28px; font-weight: 700; color: #5d6875; letter-spacing: 1px; }
+  #bank b { font-size: 54px; color: #1c9a45; font-variant-numeric: tabular-nums; }
+  .pop { position: absolute; left: 0; top: 0; font-size: 124px; color: #ff3b30; -webkit-text-stroke: 16px #fff; paint-order: stroke fill; white-space: nowrap; display: none;
+    text-shadow: 0 10px 20px rgba(0,0,0,.3); }
+  #sign { display: none; position: absolute; left: 0; right: 0; top: 330px; text-align: center; }
+  #sign div { display: inline-block; }
+  #sign .a { font-size: 62px; color: #fff; background: #e53935; padding: 10px 30px; border-radius: 16px; }
+  #sign .b { margin-top: 14px; font-size: 150px; line-height: 1; color: #ffe14a; -webkit-text-stroke: 20px #14161b; paint-order: stroke fill; }
+  #chart { display: none; position: absolute; left: 150px; top: 320px; width: 780px; height: 500px; background: #fff; border-radius: 40px; box-shadow: 0 16px 40px rgba(0,0,0,.3); }
+  #chart h3 { margin: 30px 0 0 44px; font-size: 50px; color: #1c1f26; }
+  #tv { display: none; border: 30px solid #14161b; border-radius: 70px; box-sizing: border-box; box-shadow: inset 0 0 120px rgba(0,0,0,.45); }
+  #tv .live { position: absolute; left: 50px; top: 300px; background: #e53935; color: #fff; font-size: 44px; padding: 8px 26px; border-radius: 12px; }
+  #tv .strip { position: absolute; left: 240px; top: 300px; background: #14161b; color: #fff; font-size: 38px; font-weight: 700; padding: 13px 26px; border-radius: 12px; }
+  #notif { display: none; position: absolute; left: 80px; top: 330px; width: 920px; box-sizing: border-box; padding: 34px 40px; border-radius: 46px; background: rgba(255,255,255,.96);
+    box-shadow: 0 20px 50px rgba(0,0,0,.35); color: #1c1f26; }
+  #notif .h { display: flex; align-items: center; gap: 18px; font-size: 34px; font-weight: 700; color: #5d6875; }
+  #notif .h i { width: 56px; height: 56px; border-radius: 14px; background: #7a3db8; display: inline-block; }
+  #notif .h span { margin-left: auto; }
+  #notif .t { margin-top: 18px; font-size: 66px; line-height: 1.1; }
+  #notif .p { margin-top: 8px; font-size: 92px; color: #e53935; }
+  .spark { position: absolute; width: 90px; height: 90px; display: none; }
+  #flash { background: #7dff9a; opacity: 0; }
+  #fade { background: #000; opacity: 0; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<div class="ov" id="tv"><div class="live">● LIVE</div><div class="strip">MAYOR GRIMSBY SPEAKS</div></div>
+<div class="ov" id="sparks"></div>
+<div class="ov" id="pops"></div>
+<div class="ov"><div id="chart"><h3>CITY INCOME</h3>
+  <svg viewBox="0 0 780 400" width="780" height="400"><path d="M60 40V340H730" fill="none" stroke="#c9ced6" stroke-width="8" stroke-linecap="round"/>
+  <path id="line" d="M70 110 L190 90 L300 120 L400 100 L470 150 L560 290 L690 330" fill="none" stroke="#e53935" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1"/>
+  <path id="arrow" d="M690 330 l-64 -4 l34 -50 z" fill="#e53935"/></svg></div></div>
+<div class="ov"><div id="sign"><div class="a" id="signA">NEW RULE: PANTS LICENSE</div><br><div class="b" id="signB">$1,000</div></div></div>
+<div class="ov"><div id="notif"><div class="h"><i></i>TOWN HALL<span>now</span></div><div class="t">New tax: BURPING</div><div class="p" id="notifP">$20 each</div></div></div>
+<div class="ov"><div id="bank"><small>TOBY'S BANK</small><b id="bankV">$70</b></div></div>
+<div class="ov"><div id="cap"></div></div>
+<div class="ov" id="flash"></div>
+<div class="ov" id="fade"></div>
+<script src="../../cartoon-3d/lib/three.min.js"></script>
+<script src="engine.js"></script>
+<script src="cast.js"></script>
+<script src="sets.js"></script>
+<script>
+// The Fart Tax, a vertical reel. render(t) draws the exact frame at t seconds; reel.py made the timeline it follows.
+const TOWN = [
+  { skin: '#f6cfb4', hair: 'long', hairColor: '#c8502e', top: '#ffd23b', pants: '#3b4a6b', shoes: '#e53935' },
+  { skin: '#8d5a3b', hair: 'short', hairColor: '#1d1b1b', top: '#ff7a59', pants: '#2f4858', shoes: '#ffffff' },
+  { skin: '#f1c6a6', hair: 'bun', hairColor: '#e0b050', top: '#c06cf0', pants: '#4b5563', shoes: '#ffffff' },
+  { skin: '#c98f62', hair: 'messy', hairColor: '#2b1d16', top: '#1e88e5', pants: '#6b4f3a', shoes: '#22252c', belly: 1.2 },
+  { skin: '#f4d3bd', hair: 'long', hairColor: '#3b2a20', top: '#35c4a0', pants: '#7a4a8a', shoes: '#ffffff', s: 0.92 },
+  { skin: '#a9744f', hair: 'sides', hairColor: '#d8d8d8', top: '#e5533d', pants: '#3d4654', shoes: '#22252c', belly: 1.3, glasses: true },
+  { skin: '#e8b890', hair: 'short', hairColor: '#7a4a22', top: '#ff9fbf', pants: '#35507a', shoes: '#ffffff', s: 0.84 },
+  { skin: '#6b4630', hair: 'bun', hairColor: '#1d1b1b', top: '#f2b705', pants: '#2f6f5a', shoes: '#ffffff' },
+];
+const el = (id) => document.getElementById(id);
+const C = () => R.c, TW = (i) => R.town[i];
+
+function init(timeline) {
+  T = timeline;
+  T.shots.forEach((s) => { SC[s.id] = s; });
+  setup();
+  buildCast();
+  R.town = TOWN.map((o, i) => makePerson({ who: 'town' + i, mouth: 'smile', ...o }));
+  R.all = [...Object.values(R.c), ...R.town];
+  R.winMat = mat('#bfe6ff', { emissive: '#ffd98a', emissiveIntensity: 0, roughness: 0.2 });
+  R.W = { street: buildStreet(), room: buildRoom(), garage: buildGarage(), vault: buildVault() };
+  buildFx();
+  R.box = glassBox(R.W.street); R.box.position.set(-10.2, 0, -0.1);
+  R.drones = Array.from({ length: 5 }, () => { const d = makeDrone(); scene.add(d.g); return d; });
+  R.dropped = R.pants.clone(); R.W.street.add(R.dropped); R.dropped.position.set(16.2, 0.2, -0.7); R.dropped.rotation.set(0.2, 0.5, Math.PI / 2);
+  R.can = group(C().toby.armL, [0, -0.8, 0.08]); R.can.rotation.x = 1.05; R.can.scale.setScalar(0.72);
+  mesh(cyl(0.11, 0.11, 0.36, 20), mat('#e53935', { roughness: 0.3 }), R.can); mesh(cyl(0.112, 0.112, 0.08, 20), metal('#d5dbe2'), R.can, [0, 0.16, 0]); mesh(cyl(0.113, 0.113, 0.1, 20), mat('#ffffff'), R.can, [0, -0.02, 0]);
+  R.pops = Array.from({ length: 8 }, () => { const d = document.createElement('div'); d.className = 'pop'; el('pops').appendChild(d); return d; });
+  R.stars2 = [[250, 620], [830, 560], [200, 980], [880, 940], [540, 430], [330, 800], [760, 780]].map(([x, y], i) => {
+    const d = document.createElement('div'); d.className = 'spark'; d.style.left = x - 45 + 'px'; d.style.top = y - 45 + 'px';
+    d.innerHTML = `<svg viewBox="-45 -45 90 90"><path d="M0-45Q7-7 45 0Q7 7 0 45Q-7 7-45 0Q-7-7 0-45Z" fill="${i % 2 ? '#fff6a8' : '#ffffff'}"/></svg>`;
+    el('sparks').appendChild(d); return d;
+  });
+  // Toby's bank: $10 leaves 0.3 s after each of his toots.
+  R.bank = ['s01', 's05', 's06', 's07'].flatMap((id) => Object.entries(SC[id].cues).filter(([k]) => k[0] === 'f').map(([, v]) => v + 0.3)).sort((a, b) => a - b);
+  // Captions: two or three words at a time, split at punctuation.
+  R.caps = [];
+  for (const l of Object.values(T.lines)) {
+    let cur = 0, grp = [];
+    const flush = () => { if (grp.length) R.caps.push({ a: grp[0].at, end: l.start + l.dur + 0.25, words: grp, who: l.who }); grp = []; };
+    l.words.forEach(([w, at]) => {
+      const i = l.text.indexOf(w, cur), end = i < 0 ? cur : i + w.length;
+      cur = end;
+      const mark = l.text[end] || '';
+      if (grp.length && grp.map((x) => x.w).join(' ').length + w.length > 14) flush();
+      grp.push({ w: w + ('?!'.includes(mark) ? mark : ''), at: l.start + at });
+      if ('.,!?:'.includes(mark) && mark || grp.length === 3) flush();
+    });
+    flush();
+  }
+  R.caps.sort((a, b) => a.a - b.a);
+  R.caps.forEach((c, i) => { c.b = R.caps[i + 1] ? Math.min(c.end, R.caps[i + 1].a) : c.end; });
+}
+
+// ---------- per-frame helpers ----------
+function ln(s, n) { const l = T.lines[`${s.id}_${String(n).padStart(2, '0')}`]; return { a: l.start - s.start, b: l.start - s.start + l.dur }; }
+const cu = (s, name) => s.cues[name] - s.start;
+// Shot-relative time of a word in the n-th line.
+function wd(s, n, word) { const l = T.lines[`${s.id}_${String(n).padStart(2, '0')}`]; return l.start - s.start + l.words.find(([w]) => w.toLowerCase().replace(/[^a-z0-9$]/g, '') === word)[1]; }
+const world = (name, mood, fx = 0, fz = 0) => { R.W[name].visible = true; setMood(mood, fx, fz); };
+const HOLD = { armRx: -1.15, armR: 0.05 };   // Toby's phone held up
+const UP = (t, k = 1) => ({ armL: -2.6 + Math.sin(t * 9) * 0.2 * k, armR: 2.6 - Math.sin(t * 9) * 0.2 * k });
+// A toot from someone standing at (x, z), facing the camera.
+const toot = (u, at, x, z, o = {}) => puff(u, at, x - 0.45, 1.05, z - 0.2, o);
+// "−$10" (or any label) flying up from a 3D point; drawn after the camera is set.
+function pop(text, p, at, u, color = '#ff3b30') {
+  const a = u - at;
+  if (a < 0 || a > 1.15) return;
+  R.later.push(() => {
+    const d = R.pops[R.popN++ % R.pops.length], q = toScreen(V(...p));
+    d.style.display = 'block'; d.textContent = text; d.style.color = color; d.style.opacity = 1 - seg(a, 0.8, 1.15);
+    d.style.transform = `translate(${q.x}px, ${q.y - 250 * easeOut(a / 1.15)}px) translate(-50%, -50%) scale(${backOut(seg(a, 0, 0.22))}) rotate(${Math.sin(a * 9) * 4}deg)`;
+  });
+}
+function captions(t) {
+  const c = [...R.caps].reverse().find((x) => t >= x.a && t < x.b), cap = el('cap');
+  if (!c) { cap.innerHTML = ''; return; }
+  const cur = [...c.words].reverse().find((w) => t >= w.at);
+  cap.className = c.who === 'drone' ? 'drone' : '';
+  cap.innerHTML = c.words.map((w) => `<span${w === cur ? ' class="on"' : ''}>${w.w}</span>`).join(' ');
+  cap.style.transform = `scale(${0.86 + 0.14 * backOut(seg(t, c.a, c.a + 0.14))})`;
+}
+// Toby's balance shows only while his money is the point: the hook, the morning's toots, and the "No bill" test.
+const BANK_SHOTS = ['s01', 's05', 's06', 's07', 's12'];
+function bank(t, s) {
+  const b = el('bank'), i = T.shots.indexOf(s);
+  b.style.display = BANK_SHOTS.includes(s.id) ? 'flex' : 'none';
+  const fresh = i > 0 && !BANK_SHOTS.includes(T.shots[i - 1].id) ? backOut(seg(t, s.start, s.start + 0.25)) : 1;   // pops in when it comes back
+  const n = R.bank.filter((x) => x <= t).length, last = R.bank[n - 1], hit = last !== undefined ? seg(t, last, last + 0.5) : 1;
+  el('bankV').textContent = '$' + (70 - 10 * n);
+  el('bankV').style.color = hit < 1 || n >= 6 ? '#e53935' : '#1c9a45';
+  b.style.transform = `translateX(-50%) translateX(${hit < 1 ? Math.sin(t * 60) * 12 * (1 - hit) : 0}px) scale(${fresh * (1 + 0.14 * (1 - hit))})`;
+}
+
+// ---------- the shots ----------
+const SHOTS = {
+  s01(s, u, t) {   // the hook: Toby walks in, toots, pays
+    world('street', 'day');
+    const f = cu(s, 'f1'), stop = f - 0.3, after = u > f;
+    place(C().toby, lerp(-2.1, 0, ease(seg(u, -0.6, stop))), 0.2, { rotY: lerp(Math.PI / 2, 0.12, ease(seg(u, stop - 0.25, stop + 0.2))) });
+    act(C().toby, t, { walk: u < stop, ...HOLD, hop: hop(u, f, 0.14, 0.3), mouth: after ? 'frown' : 'flat', brow: after ? -0.3 : 0, wide: after && u < f + 0.6 ? 1.25 : 1, tilt: after ? 0.08 : 0 });
+    toot(u, f, 0, 0.2, { size: 1.2 });
+    look(camPath(u, [[0, 0.2, 1.5, 7.8, 0.1, 1.3, 0, 40], [s.dur, 0.1, 1.55, 6.2, 0, 1.45, 0, 40]]));
+    pop('−$10', [0.5, 2.0, 0.9], f + 0.3, u);
+  },
+  s02(s, u, t) {   // a Sniffer wakes up
+    world('street', 'day', 2.8);
+    const al = cu(s, 'alarm');
+    puff(u, al - 0.75, 1.9, 2.95, -0.8, { dir: [1.0, 0.1, -0.1], size: 0.5, life: 1.0 });
+    setSniffer(R.posts[2.8].sniffer, t, u > al ? 1 : 0);
+    look(camPath(u, [[0, 3.5, 3.3, 2.6, 2.8, 3.15, -1.04, 40], [s.dur, 3.2, 3.25, 1.7, 2.8, 3.15, -1.04, 40]]));
+  },
+  s03(s, u, t) {   // a woman at the bus stop is caught
+    world('street', 'day', 7.5);
+    const f = cu(s, 'f1'), after = u > f;
+    place(TW(0), 7.5, 0.2, { rotY: -0.15 });
+    act(TW(0), t, { hop: hop(u, f + 0.05, 0.3, 0.35), wide: after ? 1.3 : 1, mouth: after ? 'o' : 'smile', brow: after ? -0.35 : 0, ...(after ? UP(t, 0.5) : {}) });
+    toot(u, f, 7.5, 0.2);
+    setSniffer(R.posts[8.4].sniffer, t, u > f + 0.25 ? 1 : 0);
+    look([7.75, 1.9, 8.6, 7.85, 1.95, 0, 40]);
+    pop('−$10', [7.5, 2.9, 0.4], f + 0.45, u);
+  },
+  s04(s, u, t) {   // last night: beans
+    world('room', 'roomNight');
+    const rm = cu(s, 'rumble'), bad = u > rm;
+    R.beans.visible = R.cans.visible = true;
+    C().toby.phone.visible = false;
+    place(C().toby, -0.25, -0.5);
+    act(C().toby, t, { armRx: bad ? -0.5 : -1.7 - 0.45 * Math.sin(u * 7), armR: bad ? -0.45 : 0.1, armLx: bad ? -0.5 : 0, armL: bad ? 0.45 : -0.14, mouth: bad ? 'wavy' : 'grin',
+      brow: bad ? -0.45 : 0, lookUp: bad ? 0.4 : 0.1, shake: bad ? 1.2 : 0, wide: bad ? 1.15 : 1 });
+    light(R.lamp, 0.3, 5.4, 1.4, 1.5, '#ffd9a0');
+    look(camPath(u, [[0, 0.3, 2.5, 8.6, 0.3, 2.05, 0, 40], [rm, 0.2, 2.45, 7.6, 0.2, 2.05, 0, 40], [s.dur, -0.1, 2.4, 5.6, -0.2, 2.15, 0, 40]]));
+  },
+  s05(s, u, t) {   // out of bed
+    world('room', 'room', -12);
+    const f = cu(s, 'f1'), after = u > f;
+    place(C().toby, -11.2, 0.5, { rotY: 0.1 });
+    act(C().toby, t, { ...(after ? HOLD : { armL: -2.5, armR: 2.5 }), mouth: after ? 'flat' : 'o', squint: after ? 1 : 0.5, wide: after && u < f + 0.6 ? 1.25 : 1, hop: hop(u, f, 0.12, 0.3), brow: after ? -0.3 : 0 });
+    toot(u, f, -11.2, 0.5);
+    look([-11.7, 1.7, 8.0, -11.9, 1.5, 0, 40]);
+    pop('−$10', [-11.5, 2.5, 1.0], f + 0.3, u);
+  },
+  s06(s, u, t) {   // tying a shoe
+    world('room', 'room', -6);
+    const f = cu(s, 'f1'), bend = ease(seg(u, 0, 0.5)) * (1 - ease(seg(u, f + 0.15, f + 0.6)));
+    place(C().toby, -6, 0.3, { rotY: 0.55 });
+    C().toby.phone.visible = false;
+    act(C().toby, t, { lean: 1.2 * bend, armLx: -0.35 * bend, armRx: -0.35 * bend, lookUp: 0.2 * bend, mouth: u > f ? 'grit' : 'flat', wide: u > f ? 1.25 : 1, brow: u > f ? -0.3 : 0 });
+    puff(u, f, -6.25, 1.3, -0.25, { dir: [-0.5, 0.6, -0.3], size: 1.1 });
+    look([-5.6, 1.4, 7.4, -6, 1.2, 0, 40]);
+    pop('−$10', [-6.75, 2.5, 0.6], f + 0.3, u);
+  },
+  s07(s, u, t) {   // breakfast: three more, almost broke
+    world('room', 'room');
+    const fs = [cu(s, 'f1'), cu(s, 'f2'), cu(s, 'f3')], n = fs.filter((f) => u > f).length;
+    place(C().toby, -0.25, -0.5);
+    act(C().toby, t, { ...HOLD, hop: fs.reduce((a, f) => a + hop(u, f, 0.1, 0.25), 0), mouth: n === 3 ? 'frown' : n ? 'grit' : 'flat', brow: n ? -0.45 : 0, wide: n && u < fs[2] + 0.5 ? 1.25 : 1,
+      tilt: n === 3 ? 0.12 : 0, lookUp: n === 3 ? 0.15 : 0 });
+    fs.forEach((f, i) => { puff(u, f, -0.25 + (i % 2 ? 0.75 : -0.75), 2.0, -0.7, { dir: [i % 2 ? 0.5 : -0.5, 0.5, 0] }); pop('−$10', [-0.25 + (i - 1) * 0.55, 2.9, 0.4], f + 0.3, u); });
+    look(camPath(u, [[0, -0.1, 2.35, 6.6, -0.2, 2.05, 0, 40], [s.dur, -0.15, 2.35, 5.4, -0.2, 2.1, 0, 40]]));
+  },
+  s08(s, u, t) {   // plain rice
+    world('street', 'day', -14);
+    const l2 = ln(s, 2), sad = u > l2.a + 0.5;
+    place(C().rice, -14, 0.2, { rotY: 0.2 });
+    act(C().rice, t, { armLx: -0.8, armRx: -0.8, armL: 0.32, armR: -0.32, lookUp: sad ? 0 : 0.3, tilt: sad ? 0.1 : 0 });
+    look(camPath(u, [[0, -13.7, 1.75, 8.0, -14, 1.5, 0, 40], [s.dur, -13.8, 1.75, 6.6, -14, 1.55, 0, 40]]));
+  },
+  s09(s, u, t) {   // the man in the soundproof box
+    world('street', 'day', -9.6);
+    const pc = cu(s, 'puff');
+    R.box.visible = true;
+    place(C().boxguy, -10.2, -0.1);
+    act(C().boxguy, t, { armR: 2.5 + Math.sin(t * 8) * 0.25, mouth: u > pc + 0.2 ? 'grin' : 'smile' });
+    puff(u, pc, -10.75, 1.05, -0.3, { dir: [0.05, 0.85, 0], size: 1.2, life: 2.2 });
+    look([-9.75, 1.95, 9.6, -9.75, 1.85, 0, 40]);
+  },
+  s10(s, u, t) {   // the rich man
+    const xa = (a) => 9.4 + a * 0.85, x = xa(u);
+    world('street', 'day', x);
+    place(C().rich, x, 0.2, { rotY: 1.0 });
+    act(C().rich, t, { walk: 7, armL: -0.5, armR: 0.5, tilt: Math.sin(t * 3.5) * 0.06 });
+    ['f1', 'f2', 'f3', 'f4'].forEach((k, i) => {
+      const f = cu(s, k);
+      puff(u, f, xa(f) - 0.5, 1.05, 0, { dir: [-0.5, 0.45, i % 2 ? 0.2 : -0.3] });
+      pop('−$10', [x - 0.75, 1.9 + (i % 2) * 0.45, 0.3], f + 0.25, u);
+    });
+    R.bills.forEach((b, i) => {
+      const a = u - i * 0.38;
+      b.visible = a > 0 && a < 2.2;
+      b.position.set(xa(i * 0.38) - 0.3 - a * 0.25 + Math.sin(a * 5 + i) * 0.25, 1.3 + a * 1.1 - a * a * 0.75, 0.3 + (i % 3 - 1) * 0.35);
+      b.rotation.set(a * 5 + i, a * 3, i);
+    });
+    look([x - 0.2, 1.6, 8.0, x - 0.3, 1.45, 0, 40]);
+  },
+  s11(s, u, t) {   // the garage: building the Silent Pants
+    world('garage', 'garage');
+    const rv = cu(s, 'reveal');
+    if (u < rv) {
+      C().toby.phone.visible = false;
+      place(C().toby, 0, -0.6);
+      act(C().toby, t, { armLx: -0.95, armRx: -0.95, armL: 0.25, armR: -0.25, lookUp: 0.32, mouth: 'grit', brow: 0.3, lean: 0.12 });
+      sparks(t, 0, 1.45, 0.25);
+      light(R.lamp, 0, 2.3, 1.2, 1.5 + 1.2 * (Math.sin(t * 43) > 0), '#ffd27a');
+      look(camPath(u, [[0, 0.5, 2.3, 7.6, 0, 1.95, 0, 40], [rv, 0.2, 2.2, 6.2, 0, 1.95, 0, 40]]));
+    } else {
+      const k = u - rv;
+      R.pants.rotation.y = -0.5 + k * 0.5;
+      R.pants.scale.setScalar(backOut(seg(k, 0, 0.35)));
+      light(R.lamp, 6, 5, 3.5, 2.6, '#ffffff'); light(R.lamp2, 4.2, 2, 2, 1.2, '#8fc8ff');
+      look(camPath(k, [[0, 6, 2.2, 6.8, 6, 2.0, 0.4, 40], [s.dur - rv, 6, 2.15, 5.6, 6, 2.05, 0.4, 40]]));
+      R.stars2.forEach((d, i) => { d.style.display = 'block'; d.style.transform = `scale(${Math.max(0, Math.sin(k * 5 + i * 1.3))}) rotate(${k * 60}deg)`; });
+    }
+  },
+  s12(s, u, t) {   // testing them next to a Sniffer
+    world('street', 'day', 2.2);
+    const pc = cu(s, 'puff'), l1 = ln(s, 1), l2 = ln(s, 2), l3 = ln(s, 3);
+    place(C().toby, 1.7, 0.2, { rotY: 0.2 });
+    wear(C().toby, true);
+    act(C().toby, t, { ...HOLD, armL: u > l1.a && u < l2.a ? -2.3 : u > l3.a ? -2.6 : -0.14, mouth: u > l3.a ? 'smirk' : 'flat', hop: hop(u, l3.a + 0.1, 0.2, 0.4), look: u > l2.a && u < l3.a ? 0.5 : 0, lookUp: u > l2.a && u < l3.a ? -0.3 : 0 });
+    puff(u, pc, 1.0, 1.05, 0.1, { dir: [0.75, 0, 0.1], size: 0.5, life: 0.55 });
+    look(camPath(u, [[0, 2.3, 1.9, 8.2, 2.25, 1.85, 0, 40], [s.dur, 2.3, 1.9, 7.4, 2.25, 1.85, 0, 40]]));
+    pop('$0', [2.15, 2.0, 0.9], l3.a + 0.1, u, '#1fa84a');
+  },
+  s13(s, u, t) {   // the whole town in silver pants; the city's income falls
+    const cx = 0.3 + u * 0.9, ch = cu(s, 'chart');
+    world('street', 'day', cx);
+    [1, 2, 3, 4, 5, 6].forEach((i, j) => {
+      place(TW(i), -3.6 + j * 1.45 + u * 1.15, j % 2 ? 0.75 : -0.15, { rotY: 0.9 });
+      wear(TW(i), true);
+      act(TW(i), t + j * 0.4, { walk: 7.5, mouth: j % 2 ? 'grin' : 'smile' });
+    });
+    look([cx, 2.3, 12, cx + 0.2, 1.3, 0, 40]);
+    const k = seg(u, ch, ch + 1.2);
+    el('chart').style.display = u > ch - 0.25 ? 'block' : 'none';
+    el('chart').style.transform = `translateY(${-700 * (1 - backOut(seg(u, ch - 0.25, ch + 0.15)))}px)`;
+    el('line').style.strokeDashoffset = 1 - k;
+    el('arrow').style.opacity = k >= 1 ? 1 : 0;
+  },
+  s14(s, u, t) {   // drones; the new rule
+    world('street', 'dawn');
+    const sg = cu(s, 'sign'), l2 = T.lines.s14_02;
+    if (u < sg - 0.15) {
+      R.drones.forEach((d, i) => {
+        d.g.visible = true;
+        d.g.position.set((i - 2) * 2.0, 7.2 + (i % 2) * 1.5 + 9 * (1 - easeOut(seg(u, i * 0.18, 1.5 + i * 0.18))), -1.5 - (i % 2) * 2.5);
+        d.g.rotation.y = 0; d.g.scale.setScalar(1);
+        flyDrone(d, t, i);
+      });
+      [[1, -1.1, 1.0], [4, 1.0, 1.4]].forEach(([i, x, z]) => { place(TW(i), x, z, { rotY: Math.PI }); wear(TW(i), true); act(TW(i), t, { lookUp: -0.45 }); });
+      look(camPath(u, [[0, 0, 1.5, 10.5, 0, 5.2, -3, 46], [sg, 0, 1.5, 9.5, 0, 5.6, -3, 46]]));
+    } else {
+      const d = R.drones[0], f = Math.floor((t - l2.start) * T.fps), loud = f >= 0 && f < l2.env.length ? l2.env[f] : 0;
+      d.g.visible = true; d.g.position.set(0, 5.4, 1); d.g.rotation.y = Math.sin(t * 1.1) * 0.12; d.g.scale.setScalar(1 + 0.05 * loud);
+      flyDrone(d, t);
+      R.drones.slice(1, 3).forEach((o, i) => { o.g.visible = true; o.g.position.set(i ? 3.4 : -3.6, 8.2 + i, -7); o.g.scale.setScalar(1); flyDrone(o, t, i + 2); });
+      look([0, 4.6, 9.0, 0, 5.0, 1, 40]);
+      const a = wd(s, 2, 'pants'), b = wd(s, 2, '$1000');
+      el('sign').style.display = u > a ? 'block' : 'none';
+      el('signA').style.transform = `scale(${backOut(seg(u, a, a + 0.25))})`;
+      el('signB').style.transform = `scale(${u > b ? 0.6 + 0.4 * backOut(seg(u, b, b + 0.3)) : 0}) rotate(-4deg)`;
+    }
+  },
+  s15(s, u, t) {   // panic; the man in his underwear
+    world('street', 'day', 17);
+    const rn = cu(s, 'run');
+    if (u < rn) {
+      [[1, -1, 0.4], [2, 1, -0.3], [4, -1, 1.2], [6, 1, 0.9]].forEach(([i, dir, z], j) => {
+        place(TW(i), 17 + dir * (0.25 + u * 1.1) + (j - 1.5) * 0.35, z, { rotY: dir * 1.3 });
+        wear(TW(i), true);
+        act(TW(i), t + j, { walk: 15, mouth: 'yell', brow: -0.4, wide: 1.25, ...UP(t + j) });
+      });
+      look([17, 1.9, 11, 17, 1.5, 0, 40]);
+    } else {
+      const k = u - rn;
+      R.dropped.visible = true;
+      place(C().boxers, 17 + Math.sin(k * 6) * 0.12, -0.6 + k * 1.75);
+      act(C().boxers, t, { walk: 17, lean: 0.22, wide: 1.3, armL: -1.2 + Math.sin(t * 17) * 0.8, armR: 1.2 + Math.sin(t * 17) * 0.8 });
+      look([17.2, 1.5, 9.6, 17, 1.45, 0, 40]);
+    }
+  },
+  s16(s, u, t) {   // Mr. Puff floats away
+    world('street', 'day', -16.8);
+    const fl = cu(s, 'float'), big = ease(seg(u, 0.2, fl + 0.3)), up = easeIn(seg(u, fl - 0.1, s.dur + 0.6)), y = 11 * up;
+    place(C().puff, -16.8 + up * 2.2, 0.5, { y, rotZ: Math.sin(t * 2) * 0.12 * seg(u, fl, fl + 1) });
+    act(C().puff, t, { inflate: big, puff: big, mouth: u < fl ? 'puff' : 'o', wide: u > fl ? 1.3 : 1, brow: -0.3, shake: u < fl ? big * 1.5 : 0, armL: -0.3 - big * 1.1, armR: 0.3 + big * 1.1 });
+    look(camPath(u, [[0, -16.6, 1.8, 9.4, -16.8, 1.7, 0, 40], [fl, -16.6, 1.8, 9.4, -16.8, 1.9, 0, 40], [s.dur, -16.4, 1.9, 10.5, -15.6, 1.9 + y * 0.82, 0, 40]]));
+  },
+  s17(s, u, t) {   // something strange on TV
+    world('room', 'roomNight', 12);
+    const k = ease(seg(u, 0.2, 1.2));
+    C().toby.phone.visible = false;
+    place(C().toby, 12, -1.0, { y: -0.1 });
+    act(C().toby, t, { sit: true, lean: 0.15 + 0.3 * k, squint: 1 - 0.45 * k, brow: 0.35 * k, armLx: -0.5, armRx: -0.5, lookUp: -0.12 * k });
+    light(R.lamp2, 12, 1.9, 3.4, 1.9 + 0.6 * Math.sin(t * 13) * Math.sin(t * 5), '#9fd0ff');
+    look(camPath(u, [[0, 12, 1.9, 7.0, 12, 1.7, -1, 40], [s.dur, 12, 1.95, 4.8, 12, 1.95, -1, 40]]));
+  },
+  s18(s, u, t) {   // the mayor, live, not charged
+    world('street', 'day', 42);
+    const pc = cu(s, 'puff'), z = cu(s, 'zero');
+    place(C().mayor, 42, -0.15, { y: 0.4 });
+    act(C().mayor, t, { armR: 2.3 + Math.sin(t * 7) * 0.25, wide: u > pc && u < pc + 0.5 ? 1.25 : 1, tilt: u > z ? 0.1 : 0, hop: hop(u, pc, 0.12, 0.3) });
+    puff(u, pc, 41.35, 1.9, -0.5, { dir: [-0.3, 0.7, 0], size: 1.5, life: 2.0 });
+    look(camPath(u, [[0, 42.6, 2.2, 7.6, 42.7, 2.25, 0, 40], [s.dur, 42.6, 2.2, 6.9, 42.7, 2.3, 0, 40]]));
+    el('tv').style.display = 'block';
+    pop('$0', [43.4, 3.2, -0.9], z, u, '#1fa84a');
+  },
+  s19(s, u, t) {   // following his car at night
+    const bx = -5 + u * 5.2;
+    world('street', 'night', bx + 2, 4);
+    R.car.visible = R.bike.visible = true;
+    R.car.position.set(bx + 5.2, 0, 4.4); R.bike.position.set(bx, 0, 4.9);
+    R.wheels.forEach((w) => { w.rotation.y = -u * 13; });
+    R.bikeWheels.forEach((w) => { w.rotation.z = -u * 12; });
+    C().toby.phone.visible = false;
+    place(C().toby, bx - 0.25, 4.9, { y: 0.32, rotY: Math.PI / 2 });
+    act(C().toby, t, { lean: 0.5, walk: 11, armLx: -1.0, armRx: -1.0, lookUp: -0.3, squint: 0.7, brow: 0.3 });
+    light(R.lamp, bx + 8.4, 0.9, 4.4, 2.2, '#fff3c4'); light(R.lamp2, bx - 1.5, 3, 8, 1.6, '#b9c8ff');
+    look([bx - 7.2, 2.9, 7.6, bx + 5, 1.2, 4.3, 40]);
+  },
+  s20(s, u, t) {   // under City Hall: the Big Nose
+    world('vault', 'vault');
+    const l2 = ln(s, 2), sn = cu(s, 'sniff');
+    runBigNose(R.nose, t);
+    light(R.lamp, 0, 5, 0.5, 2.6, '#ffd9a0'); light(R.lamp2, 0, 2.8, 3.6, 1.3, '#ff5a4a');
+    C().toby.phone.visible = false;
+    R.button.g.visible = false;
+    if (u < l2.a) {
+      const x = lerp(-5.2, -3.0, seg(u, 0, l2.a));
+      place(C().toby, x, 5.6, { rotY: 1.1 });
+      act(C().toby, t, { walk: 5, lean: 0.18, look: Math.sin(u * 4) * 0.7, wide: 1.15, mouth: 'o' });
+      look([x + 0.9, 1.9, 12.4, x + 0.5, 1.6, 5.6, 40]);
+    } else {
+      place(C().toby, -2.4, 6.2, { rotY: Math.PI - 0.3 });
+      act(C().toby, t, { lookUp: -0.45 });
+      [-1, 1].forEach((sx) => { for (let i = 0; i < 4; i++) { const a = sn + i * 0.38 + (sx > 0 ? 0.19 : 0); puff(u, a, sx * 5, 8.5, 1.5, { dir: [sx * -3.75, -4.8, -3.55], size: 0.7, life: 1.2 }); } });
+      look(camPath(u, [[l2.a, 0, 2.4, 19.5, 0, 4.4, -4.2, 44], [s.dur, 0, 2.6, 17, 0, 4.3, -4.2, 44]]));
+    }
+  },
+  s21(s, u, t) {   // the big red button
+    world('vault', 'vault');
+    const l2 = ln(s, 2);
+    runBigNose(R.nose, t);
+    R.button.btn.material.emissiveIntensity = 0.55 + 0.45 * Math.sin(t * 5);
+    light(R.lamp2, 0, 2.9, 3.6, 1.6 + 0.6 * Math.sin(t * 5), '#ff5a4a'); light(R.lamp, 0, 5, 4.5, 1.2, '#ffe9c4');
+    look(camPath(u, [[0, 0.7, 4.1, 5.5, 0, 1.4, 2.4, 40], [l2.a - 0.25, 0.4, 4.05, 5.0, 0, 1.4, 2.4, 40], [l2.a + 0.5, 0, 2.8, 9.6, 0, 2.75, 2.2, 40]]));
+  },
+  s22(s, u, t) {   // no guards, no cameras: press
+    world('vault', 'vault');
+    const l1 = ln(s, 1), l2 = ln(s, 2), pr = cu(s, 'press'), on = u < pr;
+    runBigNose(R.nose, t, on ? 1 : 0);
+    R.button.btn.position.y = 1.77 - 0.15 * seg(u, pr, pr + 0.07);
+    if (!on) { R.button.btn.material.color.set('#2fbf5b'); R.button.btn.material.emissive.set('#2fbf5b'); }
+    light(R.lamp2, 0, 2.9, 3.6, 1.6, on ? '#ff5a4a' : '#5aff8a'); light(R.lamp, 0, 5, 4.5, on ? 1.2 : 0.5, '#ffe9c4');
+    place(C().toby, -0.95, 2.5, { rotY: Math.PI / 2 });
+    act(C().toby, t, { look: u < l2.a ? -1.0 : on && u < l2.b + 0.1 ? 0.9 : -0.5, wide: 1.15, armLx: lerp(-0.1, -2.9, ease(seg(u, l2.b, pr - 0.12))) + 1.15 * seg(u, pr - 0.1, pr),
+      lean: 0.12 * seg(u, pr - 0.1, pr), mouth: on ? 'flat' : 'smirk' });
+    look(camPath(u, [[0, 0.2, 2.4, 9.6, -0.3, 2.0, 2.5, 40], [s.dur, 0, 2.3, 8.6, -0.3, 2.0, 2.5, 40]]));
+    el('flash').style.opacity = 0.7 * (1 - seg(u, pr, pr + 0.5)) * (u > pr ? 1 : 0);
+  },
+  s23(s, u, t) {   // every screen turns green
+    world('street', 'day', 22);
+    const gr = cu(s, 'green'), on = u > gr;
+    R.screenRed.visible = !on; R.screenGreen.visible = on;
+    [[2, 20.8, 0.7], [3, 22, 1.1], [6, 23.2, 0.6]].forEach(([i, x, z], j) => {
+      place(TW(i), x, z, { rotY: Math.PI - (on ? Math.PI * ease(seg(u, gr + 0.15 + j * 0.1, gr + 0.5 + j * 0.1)) : 0) });
+      act(TW(i), t + j, { lookUp: on ? 0 : -0.4, mouth: on ? 'grin' : 'smile', ...(u > gr + 0.5 ? UP(t + j) : {}), hop: u > gr + 0.5 ? Math.abs(Math.sin(t * 7 + j)) * 0.25 : 0 });
+    });
+    look(camPath(u, [[0, 22, 2.0, 12, 22, 3.2, -0.5, 40], [s.dur, 22, 2.0, 11.2, 22, 3.1, -0.5, 40]]));
+    el('flash').style.opacity = 0.45 * (1 - seg(u, gr, gr + 0.4)) * (on ? 1 : 0);
+  },
+  s24(s, u, t) {   // the whole town lets go
+    world('street', 'day', 0, -14);
+    const bm = cu(s, 'boom'), k = u - bm, sh = k > 0 ? Math.exp(-k * 0.9) : 0;
+    R.houses.forEach((h, i) => {
+      const d = h.userData, r = (i * 0.37) % 0.6;
+      [0, 1.5, 3.0].forEach((w, j) => puff(u, bm + r + w, d.x + (j - 1) * 0.6, d.y + 5.2, d.z, { dir: [(i % 3 - 1) * 0.3, 2.9, 0], size: 3.4, life: 2.3 }));
+      h.position.y = d.y + (k > r ? Math.abs(Math.sin((k - r) * 22)) * 0.16 * sh : 0);
+      h.rotation.z = k > r ? Math.sin((k - r) * 30 + i) * 0.03 * sh : 0;
+    });
+    R.birds.forEach((b, i) => {
+      const a = k - 0.1 - (i % 4) * 0.12;
+      b.visible = a > 0;
+      b.position.set(-22 + i * 4.1 + a * (i % 2 ? 2.5 : -2.5), 6 + a * 6.5 + (i % 3) * 2, -8 - (i % 4) * 6);
+      b.scale.setScalar(2.2);
+      b.userData.w.forEach((w, j) => { w.rotation.z = (j ? 1 : -1) * Math.sin(t * 16 + i) * 0.8; });
+    });
+    look(camPath(u, [[0, 0, 15, 31, 0, 5.2, -16, 44], [bm, 0, 15.5, 29, 0, 5.4, -16, 44], [s.dur, 0, 17, 33, 0, 7.5, -16, 44]]));
+    cam.position.x += Math.sin(t * 50) * 0.18 * sh; cam.position.y += Math.cos(t * 43) * 0.14 * sh;
+  },
+  s25(s, u, t) {   // a hero
+    world('street', 'day');
+    const bounce = Math.abs(Math.sin(t * 6.5)) * 0.22;
+    [[1, -1.0, 0.35], [3, -0.35, -0.15], [5, 0.4, -0.15], [7, 1.05, 0.35]].forEach(([i, x, z], j) => { place(TW(i), x, z); act(TW(i), t + j, { ...UP(t + j, 0.4), hop: bounce, mouth: 'grin', lookUp: -0.2 }); });
+    C().toby.phone.visible = false;
+    place(C().toby, 0, 0.15, { y: 1.85 + bounce });
+    act(C().toby, t, { sit: true, mouth: 'smile', ...UP(t, 0.6), tilt: Math.sin(t * 3) * 0.08 });
+    confetti(t, 0, 0.5, true);
+    look(camPath(u, [[0, 0, 1.5, 9.4, 0, 2.7, 0, 40], [s.dur, 0, 1.5, 8.4, 0, 2.8, 0, 40]]));
+  },
+  s26(s, u, t) {   // the next morning: a new tax
+    world('room', 'room', -12);
+    const bz = cu(s, 'buzz'), nt = cu(s, 'notif'), l3 = ln(s, 3), seen = u > nt + 0.2;
+    place(C().toby, -11.2, 0.5, { rotY: 0.1 });
+    C().toby.phone.rotation.z = u > bz && u < bz + 0.7 ? Math.sin(t * 70) * 0.22 : 0;
+    act(C().toby, t, { ...HOLD, squint: u < bz ? 0.45 : 1, wide: seen ? 1.3 : 1, mouth: u > l3.a ? 'frown' : seen ? 'o' : 'flat', brow: seen ? -0.4 : 0, lookUp: 0.12, hop: hop(u, bz, 0.1, 0.25) });
+    look(camPath(u, [[0, -11.3, 2.2, 6.8, -11.3, 1.85, 0.5, 40], [s.dur, -11.25, 2.2, 5.6, -11.25, 1.95, 0.5, 40]]));
+    el('notif').style.display = u > nt ? 'block' : 'none';
+    el('notif').style.transform = `translateY(${-600 * (1 - backOut(seg(u, nt, nt + 0.35)))}px)`;
+    el('notifP').style.opacity = u > l3.a ? 1 : 0;
+    el('notifP').style.transform = `scale(${0.6 + 0.4 * backOut(seg(u, l3.a, l3.a + 0.25))})`;
+  },
+  s27(s, u, t) {   // the soda
+    world('room', 'room');
+    const l1 = ln(s, 1), hu = cu(s, 'hush'), tk = cu(s, 'talk'), full = ease(seg(u, l1.b - 0.2, hu + 0.4));
+    R.can.visible = true;
+    place(C().toby, 0.2, 1.9, { rotY: -0.2 });
+    act(C().toby, t, { armLx: -1.05, armL: 0.3, puff: full, mouth: full > 0.3 ? 'puff' : 'flat', lookUp: u < tk ? 0.3 * (1 - full) : 0, look: u < tk ? 0.35 : 0.1,
+      squint: u > hu && Math.sin(t * 23) > 0.75 ? 0.35 : 1, wide: full > 0.5 ? 1.15 : 1, shake: full * 0.8 * (u < tk ? 1 : 0.4), brow: u > tk ? 0.3 : -0.2 * full });
+    look(camPath(u, [[0, 0.5, 2.3, 6.9, 0.25, 2.05, 1.9, 40], [tk, 0.4, 2.3, 6.3, 0.2, 2.1, 1.9, 40], [s.dur, 0.3, 2.35, 5.5, 0.2, 2.2, 1.9, 40]]));
+    el('fade').style.opacity = seg(u, s.dur - 0.5, s.dur - 0.05);
+  },
+};
+
+function render(t) {
+  ['sign', 'chart', 'tv', 'notif'].forEach((id) => { el(id).style.display = 'none'; });
+  R.pops.forEach((d) => { d.style.display = 'none'; });
+  R.stars2.forEach((d) => { d.style.display = 'none'; });
+  el('flash').style.opacity = 0; el('fade').style.opacity = 0;
+  Object.values(R.W).forEach((w) => { w.visible = false; });
+  R.all.forEach((c) => { c.g.visible = false; wear(c, false); });
+  R.fx.forEach((o) => { o.visible = false; });
+  R.drones.forEach((d) => { d.g.visible = false; });
+  [R.box, R.car, R.bike, R.dropped, R.beans, R.cans, R.can].forEach((o) => { o.visible = false; });
+  Object.values(R.posts).forEach((p) => setSniffer(p.sniffer, t, 0));
+  R.screenRed.visible = true; R.screenGreen.visible = false;
+  R.houses.forEach((h) => { h.position.y = h.userData.y; h.rotation.z = 0; });
+  R.button.g.visible = true; R.button.btn.position.y = 1.77; R.button.btn.material.color.set('#ff2a2a'); R.button.btn.material.emissive.set('#ff2a2a'); R.button.btn.material.emissiveIntensity = 0.55;
+  R.pants.rotation.y = 0; R.pants.scale.setScalar(1);
+  C().toby.phone.visible = true; C().toby.phone.rotation.z = 0;
+  R.lamp.intensity = 0; R.lamp2.intensity = 0;
+  R.puffN = 0; R.popN = 0; R.later = [];
+
+  const s = T.shots.find((x) => t >= x.start && t < x.start + x.dur) || T.shots[T.shots.length - 1];
+  SHOTS[s.id](s, t - s.start, t);
+  R.later.forEach((f) => f());
+  captions(t);
+  bank(t, s);
+  renderer.render(scene, cam);
+}
+</script>
+</body>
+</html>

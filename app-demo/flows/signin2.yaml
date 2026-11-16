@@ -1,0 +1,31 @@
+appId: host.exp.Exponent
+---
+- tapOn:
+    id: who
+- eraseText: 20
+- inputText: ${PHONE}
+- runFlow: /Users/rameshrawat/gymbahi/mobile/e2e/subflows/dismiss-keyboard.yaml
+- tapOn:
+    id: send-code
+- extendedWaitUntil:
+    visible:
+      id: code
+    timeout: 20000
+- tapOn:
+    id: code
+- inputText: ${CODE}
+- runFlow: /Users/rameshrawat/gymbahi/mobile/e2e/subflows/dismiss-keyboard.yaml
+- tapOn:
+    id: sign-in
+- extendedWaitUntil:
+    visible:
+      id: qr-card
+    timeout: 30000
+- waitForAnimationToEnd
+- takeScreenshot: /private/tmp/claude-501/-Users-rameshrawat-gymbahi/7ad1d8a5-f916-4f9d-b6e7-b245c35b6d49/scratchpad/video/shots/home
+- tapOn:
+    id: tab-renew
+- waitForAnimationToEnd
+- takeScreenshot: /private/tmp/claude-501/-Users-rameshrawat-gymbahi/7ad1d8a5-f916-4f9d-b6e7-b245c35b6d49/scratchpad/video/shots/renew
+- tapOn:
+    id: tab-home

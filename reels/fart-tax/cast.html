@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: #000; font-family: Montserrat, sans-serif; }
+  canvas { position: absolute; inset: 0; }
+  #plate { position: absolute; left: 0; right: 0; top: 1540px; text-align: center; }
+  #name { font-weight: 900; font-size: 112px; color: #fff; -webkit-text-stroke: 14px #1c1f26; paint-order: stroke fill; line-height: 1; }
+  #role { display: inline-block; margin: 26px 50px 0; padding: 14px 30px; border-radius: 28px; font-weight: 700; font-size: 38px; line-height: 1.3;
+    color: #1c1f26; background: rgba(255,255,255,.78); }
+  .tag { position: absolute; transform: translate(-50%, 0); font-weight: 900; font-size: 34px; color: #1c1f26; background: #fff; border-radius: 30px;
+    padding: 8px 22px; white-space: nowrap; box-shadow: 0 6px 14px rgba(0,0,0,.18); }
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<div id="plate"><div id="name"></div><div id="role"></div></div>
+<div id="tags"></div>
+<script src="../../cartoon-3d/lib/three.min.js"></script>
+<script src="engine.js"></script>
+<script src="cast.js"></script>
+<script>
+// Character sheets: show('toby') draws one page of the cast. Run cast.cjs to save them all as pictures.
+const C = () => R.c;
+function init() {
+  setup();
+  buildCast();
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.ShadowMaterial({ opacity: 0.22 }));
+  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+  // For the sheet: a Sniffer on a short pole, so the lamp does not hide behind the drone.
+  R.post = { g: group(scene), sniffer: makeSniffer() };
+  mesh(cyl(0.07, 0.09, 3.3, 12), mat('#3d4654', { roughness: 0.5 }), R.post.g, [0, 1.65, 0]);
+  R.post.sniffer.g.position.set(0, 2.9, 0.16); R.post.g.add(R.post.sniffer.g);
+  R.drone = makeDrone(); R.nose = makeBigNose(); R.button = makeButton(); R.box = glassBox(scene);
+  scene.add(R.drone.g, R.nose.g, R.button.g);
+  const r = rng(4);
+  R.bills = Array.from({ length: 9 }, () => { const b = bill(scene); const side = r() < 0.5 ? -1 : 1; b.userData = { x: side * (0.75 + r() * 0.55), y: 0.4 + r() * 3.3, z: (r() - 0.5) * 1.2, a: r() * 6 }; return b; });
+  R.props = [R.post.g, R.drone.g, R.nose.g, R.button.g, R.box, ...R.bills];
+}
+const SHEETS = {
+  toby: { name: 'TOBY', role: 'The narrator. Tired, broke, always checking his phone.', bg: ['#e9f8ee', '#a9ddbd'], cam: [0, 1.6, 7, 0, 1.3, 0, 40],
+    draw(t) { place(C().toby, 0, 0, { rotY: 0.28 }); act(C().toby, t, { armRx: -1.15, armR: 0.05, look: -0.2 }); } },
+  mayor: { name: 'MAYOR GRIMSBY', role: 'Invented the fart tax. Never pays it.', bg: ['#f1e6fb', '#c9aee8'], cam: [0, 1.6, 7, 0, 1.3, 0, 40],
+    draw(t) { place(C().mayor, 0, 0, { rotY: -0.25 }); act(C().mayor, t, { armL: -0.55, armR: 0.55, look: 0.18, tilt: 0.06 }); } },
+  puff: { name: 'MR. PUFF', role: 'The neighbor. Holds it in for far too long.', bg: ['#e6f3ff', '#a9cff2'], cam: [0, 1.75, 7.6, 0, 1.45, 0, 40],
+    draw(t) { place(C().puff, 0, 0, { rotY: 0.15 }); act(C().puff, t, { armR: 2.5, look: -0.1 }); } },
+  rich: { name: 'THE RICH MAN', role: 'Gold suit. $10 means nothing to him.', bg: ['#fff6da', '#f2d58a'], cam: [0, 1.6, 7, 0, 1.3, 0, 40],
+    draw(t) {
+      place(C().rich, 0, 0, { rotY: -0.2 }); act(C().rich, t, { armL: -1.0, armR: 1.0, look: 0.15 });
+      R.bills.forEach((b) => { const u = b.userData; b.visible = true; b.position.set(u.x, u.y, u.z + 0.6); b.rotation.set(u.a, u.a * 1.7, u.a * 0.6); });
+    } },
+  town: { name: 'THE TOWN', role: 'They ate plain rice, lived in a soundproof box, or just ran.', bg: ['#fff0e6', '#f4c7a6'], cam: [0, 2.2, 15.5, 0, 0.9, 0, 40],
+    tags: [['Rice lady', [-2.05, 0, 0]], ['Box guy', [0, 0, -0.4]], ['Underwear man', [2.1, 0, 0]]],
+    draw(t) {
+      place(C().rice, -2.05, 0, { rotY: 0.25 }); act(C().rice, t, { armLx: -0.8, armRx: -0.8, armL: 0.32, armR: -0.32, lookUp: 0.2 });
+      R.box.visible = true; R.box.position.set(0, 0, -0.4); R.box.scale.setScalar(0.92);
+      place(C().boxguy, 0, -0.4, { s: 0.92 }); act(C().boxguy, t, { armR: 2.5 });
+      place(C().boxers, 2.1, 0, { rotY: -0.5 }); act(C().boxers, 0.13, { walk: true, lean: 0.2, wide: 1.25, armL: -0.6, armR: 0.6 });
+    } },
+  machines: { name: 'SNIFFER + TAX DRONE', role: 'Sniffers sleep on every lamp post. Drones shout the new rules.', bg: ['#e8eef5', '#b7c4d4'], cam: [0, 3.75, 6.2, 0, 3.6, 0, 40],
+    draw(t) {
+      R.post.g.visible = true; R.post.g.position.set(0, 0, 0); setSniffer(R.post.sniffer, t, 0);
+      R.drone.g.visible = true; R.drone.g.position.set(0, 4.95, 0.3); R.drone.g.rotation.y = -0.25; R.drone.g.scale.setScalar(0.8); flyDrone(R.drone, t);
+    } },
+  bignose: { name: 'THE BIG NOSE', role: 'Hidden under City Hall. It sniffs the whole town.', bg: ['#31465e', '#141c28'], dark: true, cam: [0, 4.4, 21, 0, 3.5, 0, 40],
+    draw(t) {
+      R.nose.g.visible = true; R.nose.g.position.set(0, 0, -1.5); runBigNose(R.nose, t);
+      R.button.g.visible = true; R.button.g.position.set(2.2, 0, 3.4); R.button.g.rotation.y = -0.2;
+      place(C().toby, -2.1, 3.4, { rotY: 0.5 }); act(C().toby, t, { look: 0.3, lookUp: -0.35, mouth: 'o', wide: 1.15 });
+    } },
+};
+function show(id, t = 1.2) {
+  const s = SHEETS[id];
+  Object.values(R.c).forEach((c) => { c.g.visible = false; });
+  R.props.forEach((p) => { p.visible = false; });
+  scene.background = gradientTex([[0, s.bg[0]], [1, s.bg[1]]]);
+  R.hemi.intensity = s.dark ? 0.7 : 0.95;
+  s.draw(t);
+  look(s.cam);
+  document.getElementById('name').textContent = s.name;
+  document.getElementById('name').style.fontSize = s.name.length > 14 ? '84px' : s.name.length > 10 ? '96px' : '112px';
+  const role = document.getElementById('role');
+  role.textContent = s.role; role.style.color = s.dark ? '#ffffff' : '#1c1f26'; role.style.background = s.dark ? 'rgba(15,22,32,.78)' : 'rgba(255,255,255,.78)';
+  document.getElementById('tags').innerHTML = (s.tags || []).map(([text, p]) => { const q = toScreen(V(...p)); return `<div class="tag" style="left:${q.x}px;top:${q.y + 26}px">${text}</div>`; }).join('');
+  renderer.render(scene, cam);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+appId: host.exp.Exponent
+---
+- stopApp
+- openLink: exp://127.0.0.1:8081?__expo_disable_fab=1&__expo_disable_onboarding=1
+- extendedWaitUntil:
+    visible:
+      id: qr-card
+    timeout: 90000
+- waitForAnimationToEnd

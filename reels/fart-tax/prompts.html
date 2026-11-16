@@ -1,0 +1,236 @@
+<title>Fart Tax Clip Prompts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+  /* One phone-width column: settings, progress, then one card per clip, test clips first. */
+  :root {
+    --bg: #f3f5ee; --surface: #ffffff; --fg: #1e2418; --muted: #5b6553; --line: #dbe2d0;
+    --accent: #3d8a27; --accent-fg: #ffffff; --money: #cf3328; --done: #e6f1dd;
+    --display: "Bricolage Grotesque", "Arial Rounded MT Bold", system-ui, sans-serif;
+    --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #13170f; --surface: #1c2217; --fg: #e7ecdf; --muted: #a1ab95; --line: #2e3727;
+      --accent: #7bc95c; --accent-fg: #10170b; --money: #ff6f62; --done: #1e2b18; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #13170f; --surface: #1c2217; --fg: #e7ecdf; --muted: #a1ab95; --line: #2e3727;
+    --accent: #7bc95c; --accent-fg: #10170b; --money: #ff6f62; --done: #1e2b18; color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--fg); font: 17px/1.5 var(--body);
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 64px; }
+  main { max-width: 680px; margin: 0 auto; display: grid; gap: 28px; }
+  h1, h2 { font-family: var(--display); line-height: 1.1; text-wrap: balance; margin: 0; }
+  h1 { font-size: clamp(30px, 7vw, 42px); font-weight: 800; }
+  h1 .tax { color: var(--money); }
+  h2 { font-size: 23px; font-weight: 700; }
+  p { margin: 0; }
+  .lede { color: var(--muted); max-width: 60ch; }
+  .head { display: grid; gap: 10px; }
+
+  .settings { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 6px; display: grid; gap: 4px; }
+  .settings dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; }
+  .settings dt { font-weight: 700; }
+  .settings dd { margin: 0; min-width: 0; }
+  .settings .note { color: var(--muted); font-size: 15px; padding-block: 10px 12px; border-top: 1px solid var(--line); margin-top: 8px; }
+  code { font-size: 14px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; overflow-wrap: anywhere; }
+
+  .progress { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 10px; display: grid; gap: 8px; }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+  .progress .count { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+  .bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+
+  section { display: grid; gap: 14px; }
+  section > p { color: var(--muted); }
+  .clip { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 12px; }
+  .clip.done { background: var(--done); }
+  .clip.done .prompt { opacity: .55; }
+  .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+  .num { font-family: var(--display); font-weight: 800; font-size: 20px; font-variant-numeric: tabular-nums; }
+  .line { color: var(--muted); font-style: italic; min-width: 0; flex-basis: 100%; }
+  .len { font-weight: 700; font-size: 15px; color: var(--money); font-variant-numeric: tabular-nums; }
+  .prompt { margin: 0; font-size: 16px; line-height: 1.55; padding: 12px 14px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); user-select: all; overflow-wrap: anywhere; }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+  button.copy { font: 700 16px var(--body); color: var(--accent-fg); background: var(--accent); border: 0; border-radius: 10px; padding: 10px 18px; cursor: pointer; min-width: 112px; }
+  button.copy:focus-visible, input:focus-visible { outline: 3px solid var(--money); outline-offset: 2px; }
+  label.tick { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 700; }
+  label.tick input { width: 22px; height: 22px; accent-color: var(--accent); }
+  .reset { justify-self: start; font: 15px var(--body); color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  @media (prefers-reduced-motion: reduce) { .bar span { transition: none; } }
+</style>
+
+<main>
+  <header class="head">
+    <h1>The Fart <span class="tax">Tax</span>: Flow prompts</h1>
+    <p class="lede">One prompt per clip. Copy it into Google Flow, generate, download, tick it off. All the words on screen, the signs, the phone screens, the voice and the "−$10" pops get added afterwards, so the clips need none.</p>
+  </header>
+
+  <div class="settings">
+    <h2>Flow settings</h2>
+    <dl>
+      <dt>Open</dt><dd><a href="https://flow.google.com" style="color: var(--accent); font-weight: 700">Google Flow</a> (sign in, then New project)</dd>
+      <dt>Where</dt><dd>Paste in the box at the bottom right ("What do you want to create?"). The sliders button next to the arrow sets the model, shape and length.</dd>
+      <dt>Pictures</dt><dd>Nano Banana: free (0 credits)</dd>
+      <dt>Clips</dt><dd>Omni 1.2 Flash, 720p: 3 credits a second</dd>
+      <dt>Shape</dt><dd>Portrait, 9:16</dd>
+      <dt>Length</dt><dd>Shown on each clip, matched to its line</dd>
+      <dt>Outputs</dt><dd>1 per prompt</dd>
+      <dt>Credits</dt><dd>50 free a day</dd>
+      <dt>Save to</dt><dd><code>Downloads/Reels/Fart Tax/Clips/</code></dd>
+    </dl>
+    <p class="note">File names don't matter; naming a file by its clip number (like <code>04.mp4</code>) helps. If Toby looks different, a hand looks wrong, or words appear on screen, generate that clip again: 2 or 3 tries is normal.</p>
+  </div>
+
+  <div class="progress" aria-live="polite">
+    <span class="count" id="count">0 of 27 clips done</span>
+    <div class="bar"><span id="bar"></span></div>
+  </div>
+
+  <section id="chars">
+    <h2>Step 1: the characters (free)</h2>
+    <p>Make each one as a picture, generate again until it looks right (pictures cost nothing), then save it under Characters in the left menu with the name shown. Then pick that character when you make a clip that has them in it.</p>
+  </section>
+
+  <section id="tests">
+    <h2>Step 2: these 3 clips first</h2>
+    <p>They use 48 of today's 50 credits and show whether Toby stays the same from clip to clip and how the model handles a tricky shot. Send them over before doing the rest.</p>
+  </section>
+
+  <section id="rest">
+    <h2>The other 24</h2>
+    <p>In story order.</p>
+  </section>
+
+  <button class="reset" id="reset" type="button">Clear all ticks</button>
+</main>
+
+<script>
+const STYLE = 'Stylized 3D animated movie look, bright soft lighting, pastel colors, expressive cartoon faces, smooth gentle motion. Vertical 9:16 frame. No text, no captions, no logos.';
+const toby = (pants = 'grey jogger pants and white sneakers') =>
+  `Toby, a skinny young man in his mid-20s with messy light-brown curly hair, round black glasses, big hazel eyes, freckles, a green hoodie with white drawstrings, ${pants}`;
+const SILVER = 'shiny silver metallic pants with a small spinning fan on each hip, and white sneakers';
+const MAYOR = 'Mayor Grimsby, a short, round older man with grey hair at the sides, a small grey moustache, a purple suit, a gold chain with a big medallion and a tall purple top hat with a gold band';
+const PUFF = 'small puff of green cartoon gas';
+const ROOM = 'a dark hidden underground machine room';
+
+const CLIPS = [
+  [1, 'In this town, farting costs $10.',
+    `Medium shot. ${toby()}, walks toward the camera down a sunny pastel suburban street, looking at his phone. He stops; a ${PUFF} pops out behind him. He winces, then looks at the camera with a tired, deadpan sigh. Camera slowly pushes in.`],
+  [2, 'Sensors are everywhere.',
+    'Close-up of a small silver metal sensor shaped like a cartoon nose, with sleepy half-closed eyes and a little round light on top, mounted on a street lamp post. The light glows green, then the eyes snap open, the nostrils flare and sniff, and the light turns red. A sunny pastel street, blurred, behind it.'],
+  [3, 'One tiny toot, and $10 disappears from your bank account.',
+    `Medium shot, static camera. A cheerful woman with curly red hair and a yellow raincoat waits at a pastel bus stop. A ${PUFF} pops out behind her. She jumps, checks her phone and gasps in horror.`],
+  [4, 'My name is Toby, and last night I ate beans. Big mistake.',
+    `Night, a cozy small kitchen with warm lamp light. ${toby()}, sits at the table behind a huge bowl of baked beans, next to a tall tower of empty bean cans. He eats a big spoonful happily, then freezes and looks down at his stomach, worried. Slow push in.`],
+  [5, 'I got out of bed. Minus $10.',
+    `Morning, a sunlit small bedroom. ${toby('grey pajama pants')}, sits up in bed and stretches. A ${PUFF} pops out from under the blanket. He freezes mid-stretch, eyes wide.`],
+  [6, 'I tied my shoe. Another $10.',
+    `Low angle, a hallway by the front door. ${toby()}, bends down to tie his white sneaker. A ${PUFF} pops out behind him. He squeezes his eyes shut and grimaces.`],
+  [7, 'By breakfast, I was almost broke.',
+    `Close-up, a kitchen in the morning. ${toby()}, stands at the counter holding a bowl of cereal, staring at his phone in despair, shoulders slumping. Slow push in on his face.`],
+  [8, 'People here got creative. Some ate only plain rice.',
+    'Medium shot in a town park. A sad young woman with a dark hair bun and an orange dress sits at a picnic table eating plain white rice from a blue bowl, sighing. Families eat colorful food at the tables behind her.'],
+  [9, 'One guy lived inside a soundproof box.',
+    'Medium wide shot of a pastel town sidewalk. A man in a blue sweater lives inside a tall clear glass box with a dark metal frame, sitting on a tiny chair reading a newspaper. He waves cheerfully at the people walking past.'],
+  [10, 'And the rich? They farted all day, because $10 meant nothing to them.',
+    `Tracking shot. A wealthy man in a shiny gold suit, black sunglasses and slicked-back black hair strolls down a fancy street, laughing. A ${PUFF} pops out behind him with every few steps, and dollar bills flutter out of his pockets.`],
+  [11, 'So I spent all night building the Silent Pants.',
+    `Night, a messy home garage workshop with blue light. ${toby()}, wears safety goggles over his glasses and welds at a workbench; bright warm sparks fly. Tools, wires and small fans are scattered around.`],
+  [12, 'No sound. No smell. No bill.',
+    `A bright morning street. ${toby(SILVER)}, stands proudly next to a lamp post with a small silver nose-shaped sensor whose light stays green. He gives the camera a confident thumbs up.`],
+  [13, 'Soon the whole town was wearing them, and the government was losing millions.',
+    'Wide shot, slow pan along a busy, sunny pastel town street full of happy people of all ages, all wearing the same shiny silver metallic pants with a small spinning fan on each hip, strutting proudly.'],
+  [14, 'The next morning, drones filled the sky. "New rule! Pants without a license cost $1,000!"',
+    'Low angle wide shot, morning sky over a pastel town. Dozens of black flying drones, each with one glowing red eye, a small screen hanging below and two loudspeakers, fly in over the rooftops. People on the street below look up, scared.'],
+  [15, 'Everyone panicked. One man ran home in his underwear.',
+    'A pastel town street. A panicked man with a bald head and ginger hair at the sides, wearing only a white tank top, white heart-print boxer shorts and socks, sprints toward the camera with his arms flailing. Shiny silver pants lie abandoned on the road behind him. Comedic and fast.'],
+  [16, 'My neighbor held it in so long, he floated away like a balloon.',
+    'The front yard of a suburban house. Mr. Puff, a big round man in his 50s with short dark-brown hair, blue-and-white striped pajamas and orange slippers, holds his breath with puffed-out cheeks. His body swells up round like a balloon, his feet leave the ground and he slowly floats up over the rooftops, looking surprised. The camera tilts up to follow him.'],
+  [17, 'Then I noticed something strange. The mayor farted on live TV,',
+    `News camera framing of a town hall press conference. ${MAYOR}, stands at a podium with microphones. A ${PUFF} pops out behind him. Beside the podium, a small silver nose-shaped sensor's light stays green. He grins smugly.`],
+  [18, 'and he wasn\'t charged a single dollar.',
+    `Close-up, night, a dark living room lit by a TV. ${toby()}, sits on a sofa, leans toward the screen and squints suspiciously, slowly pushing his glasses up his nose.`],
+  [19, 'That night, I followed his car',
+    `Tracking shot from the side, night, a quiet town street with streetlights. ${toby()}, rides a bicycle, crouching low, following a long shiny black car at a distance.`],
+  [20, 'to a secret room under City Hall. Inside, a giant machine was sniffing the whole town.',
+    `${ROOM.charAt(0).toUpperCase() + ROOM.slice(1)} beneath a grand building. ${toby()}, tiptoes down stone stairs and stops, amazed. In front of him stands a giant brass machine with a huge brass nose in the middle, two big round gauges like eyes above it, and copper pipes rising into the ceiling. The nose sniffs and the gauge needles twitch. Dramatic warm light.`],
+  [21, 'And in the middle, a big red button: Disable fart tax.',
+    `Close-up of a big glowing red button on a yellow-and-black striped pedestal in ${ROOM}. The button glows softly. Slow, dramatic push in.`],
+  [22, 'No guards. No cameras. I pressed it.',
+    `Close-up, ${ROOM}. ${toby()}, looks left, then right, then slams his palm down on a big glowing red button on a yellow-and-black striped pedestal.`],
+  [23, 'Every screen in town turned green.',
+    'A pastel town square. People stop and look at their phones and at a big screen on a building as all the screens glow plain bright green. They look at each other, then start cheering.'],
+  [24, 'And the whole town let go at once. It sounded like a thousand trumpets.',
+    'Wide aerial view of a pastel cartoon town at sunrise. Big puffs of green cartoon gas burst up from every house and street at the same moment, like fireworks. Windows rattle, a flock of pigeons takes off and trees shake. Epic and funny.'],
+  [25, 'I was a hero.',
+    `Low angle, a sunny town square with falling confetti. ${toby()}, is lifted up and carried on the shoulders of a cheering crowd, waving, a little embarrassed but happy.`],
+  [26, 'But the next morning, my phone buzzed. New tax: burping. $20 each.',
+    `Close-up, morning, a small bedroom. ${toby('grey pajama pants')}, is asleep. The phone on the nightstand buzzes and lights up. He opens one eye, grabs the phone and reads it sleepily.`],
+  [27, 'I looked at the soda in my hand. You\'ve got to be kidding me.',
+    `Close-up. ${toby()}, holds a can of soda, cheeks puffed out, holding in a burp. One eye twitches. He slowly turns his head and stares straight into the camera, deadpan.`],
+];
+const TESTS = [1, 4, 16];
+const SHEET = 'Full-body character design, standing in a relaxed neutral pose facing the camera, plain light grey background, soft studio lighting. Stylized 3D animated movie look, expressive cartoon face. Vertical 9:16. No text.';
+const CHARS = [
+  ['Toby', 'the narrator, in almost every clip', `${toby()}, with a tired, deadpan expression, holding a phone. ${SHEET}`],
+  ['Mayor Grimsby', 'clip 17', `${MAYOR}, with a smug grin. ${SHEET}`],
+  ['Mr. Puff', 'clip 16', `Mr. Puff, a big round man in his 50s with short dark-brown hair, a friendly face, blue-and-white striped pajamas and orange slippers. ${SHEET}`],
+];
+// Seconds a clip needs: its line read aloud plus a beat. Omni 1.2 Flash makes 3 to 10 seconds.
+const secs = (line) => Math.min(10, Math.max(3, Math.ceil(line.split(/\s+/).length / 2.7 + 1.0)));
+const KEY = 'fart-tax-done';
+
+let done = new Set();
+try { done = new Set(JSON.parse(localStorage.getItem(KEY) || '[]')); } catch (e) { /* storage blocked: ticks just won't be remembered */ }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify([...done])); } catch (e) { /* ignore */ } };
+
+function card([n, line, text], kind = 'clip') {
+  const isChar = kind === 'char';
+  const id = isChar ? `c${CHARS.findIndex((c) => c[0] === n) + 1}` : String(n).padStart(2, '0');
+  const s = isChar ? 0 : secs(line);
+  const full = isChar ? text : `${text} ${STYLE} Make it ${s} seconds long at 720p (${s * 3} credits).`;
+  const el = document.createElement('article');
+  el.className = 'clip' + (done.has(n) ? ' done' : '');
+  el.innerHTML = `
+    <div class="top"><span class="num">${isChar ? n : `Clip ${id}`}</span><span class="len"></span><span class="line"></span></div>
+    <p class="prompt" id="prompt-${id}"></p>
+    <div class="actions">
+      <button class="copy" type="button">Copy prompt</button>
+      <label class="tick"><input type="checkbox" id="done-${id}"> ${isChar ? 'Saved in Characters' : 'Downloaded'}</label>
+    </div>`;
+  el.querySelector('.len').textContent = isChar ? 'Picture · free' : `${s} s · ${s * 3} credits`;
+  el.querySelector('.line').textContent = isChar ? line : `“${line}”`;
+  el.querySelector('.prompt').textContent = full;
+  const box = el.querySelector('input');
+  box.checked = done.has(n);
+  box.addEventListener('change', () => {
+    box.checked ? done.add(n) : done.delete(n);
+    el.classList.toggle('done', box.checked);
+    save(); progress();
+  });
+  const btn = el.querySelector('button');
+  btn.addEventListener('click', () => {
+    const ok = () => { btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = 'Copy prompt'; }, 1600); };
+    const pick = () => { const r = document.createRange(); r.selectNodeContents(el.querySelector('.prompt')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = 'Selected: copy it'; };
+    try { navigator.clipboard.writeText(full).then(ok, pick); } catch (e) { pick(); }
+  });
+  return el;
+}
+function progress() {
+  const k = CLIPS.filter(([n]) => done.has(n)).length;
+  document.getElementById('count').textContent = `${k} of ${CLIPS.length} clips done`;
+  document.getElementById('bar').style.width = `${(k / CLIPS.length) * 100}%`;
+}
+CHARS.forEach((c) => document.getElementById('chars').appendChild(card(c, 'char')));
+CLIPS.filter(([n]) => TESTS.includes(n)).forEach((c) => document.getElementById('tests').appendChild(card(c)));
+CLIPS.filter(([n]) => !TESTS.includes(n)).forEach((c) => document.getElementById('rest').appendChild(card(c)));
+document.getElementById('reset').addEventListener('click', () => {
+  done.clear(); save();
+  document.querySelectorAll('.clip').forEach((el) => { el.classList.remove('done'); el.querySelector('input').checked = false; });
+  progress();
+});
+progress();
+</script>

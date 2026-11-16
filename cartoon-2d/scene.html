@@ -1,0 +1,498 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&display=swap" rel="stylesheet">
+<style>html,body{margin:0;background:#000}svg{display:block}</style>
+</head>
+<body>
+<svg id="svg" xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"></svg>
+<script>
+// Rainbow Rescue Bus, scenes 1-3. render(t) draws the frame at t seconds,
+// so every frame is exact and the video is smooth at any speed.
+const NS = 'http://www.w3.org/2000/svg';
+function S(tag, a = {}, p) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in a) e.setAttribute(k, a[k]);
+  if (p) p.appendChild(e);
+  return e;
+}
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const ease = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const easeOut = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const easeIn = (x) => Math.pow(clamp(x), 3);
+const backOut = (x) => { x = clamp(x); const c1 = 2.2, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, k) => a + (b - a) * k;
+function rng(seed) {
+  return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+const tf = (el, s) => el.setAttribute('transform', s);
+const show = (el, on) => el.setAttribute('display', on ? 'inline' : 'none');
+
+let T, svg, R = {};
+
+function defs() {
+  const d = S('defs', {}, svg);
+  const lin = (id, stops, x2 = 0, y2 = 1) => {
+    const g = S('linearGradient', { id, x1: 0, y1: 0, x2, y2 }, d);
+    stops.forEach(([o, c]) => S('stop', { offset: o, 'stop-color': c }, g));
+  };
+  const rad = (id, stops) => {
+    const g = S('radialGradient', { id }, d);
+    stops.forEach(([o, c, op = 1]) => S('stop', { offset: o, 'stop-color': c, 'stop-opacity': op }, g));
+  };
+  lin('sky', [[0, '#5fbcff'], [0.6, '#a9e2ff'], [1, '#e2f7ff']]);
+  rad('sunGlow', [[0, '#fff3a6', 0.9], [0.5, '#ffe36b', 0.35], [1, '#ffe36b', 0]]);
+  lin('hill1', [[0, '#a8e68a'], [1, '#86d066']]);
+  lin('hill2', [[0, '#8ad86a'], [1, '#62bf45']]);
+  lin('hill3', [[0, '#6fcd4f'], [1, '#48a832']]);
+  lin('busBody', [[0, '#ffe066'], [0.55, '#ffcc2f'], [1, '#f5b400']]);
+  lin('glass', [[0, '#dff5ff'], [1, '#9fdcff']], 1, 1);
+  rad('pipHead', [[0, '#ffffff'], [0.75, '#f7f7f7'], [1, '#e2e6ea']]);
+  rad('cheek', [[0, '#ff9db0', 0.8], [1, '#ff9db0', 0]]);
+  const f = S('filter', { id: 'shadow', x: '-20%', y: '-20%', width: '140%', height: '160%' }, d);
+  S('feDropShadow', { dx: 0, dy: 10, stdDeviation: 10, 'flood-color': '#1b3a5a', 'flood-opacity': 0.25 }, f);
+  const f2 = S('filter', { id: 'textShadow', x: '-20%', y: '-20%', width: '140%', height: '160%' }, d);
+  S('feDropShadow', { dx: 0, dy: 8, stdDeviation: 4, 'flood-color': '#7a1010', 'flood-opacity': 0.35 }, f2);
+}
+
+// ---------- scenery ----------
+function hillPath(y, amp, freq, phase) {
+  let p = `M -2400 1700 L -2400 ${y}`;
+  for (let x = -2400; x <= 4400; x += 40) p += ` L ${x} ${(y + amp * Math.sin(x * freq + phase)).toFixed(1)}`;
+  return p + ' L 4400 1700 Z';
+}
+function cloud(p, x, y, s) {
+  const g = S('g', {}, p);
+  const c = S('g', { transform: `scale(${s})` }, g);
+  [[0, 0, 70], [80, -30, 85], [170, 0, 70], [90, 25, 70], [-60, 20, 50], [230, 25, 50]].forEach(([cx, cy, r]) => {
+    S('circle', { cx, cy: cy + 8, r, fill: '#cfe6f7' }, c);
+  });
+  [[0, 0, 70], [80, -30, 85], [170, 0, 70], [90, 25, 70], [-60, 20, 50], [230, 25, 50]].forEach(([cx, cy, r]) => {
+    S('circle', { cx, cy, r, fill: '#ffffff' }, c);
+  });
+  return { g, x, y };
+}
+function flower(p, x, y, r, color, face = false, petals = 6) {
+  const g = S('g', { transform: `translate(${x} ${y})` }, p);
+  const inner = S('g', {}, g);
+  for (let i = 0; i < petals; i++) {
+    const a = (i / petals) * Math.PI * 2;
+    S('ellipse', { cx: Math.cos(a) * r * 0.62, cy: Math.sin(a) * r * 0.62, rx: r * 0.5, ry: r * 0.42,
+      transform: `rotate(${(a * 180) / Math.PI} ${Math.cos(a) * r * 0.62} ${Math.sin(a) * r * 0.62})`, fill: color }, inner);
+  }
+  S('circle', { cx: 0, cy: 0, r: r * 0.42, fill: '#ffd43b', stroke: '#f5b400', 'stroke-width': r * 0.05 }, inner);
+  if (face) {
+    S('circle', { cx: -r * 0.14, cy: -r * 0.06, r: r * 0.06, fill: '#4a2b12' }, inner);
+    S('circle', { cx: r * 0.14, cy: -r * 0.06, r: r * 0.06, fill: '#4a2b12' }, inner);
+    S('path', { d: `M ${-r * 0.16} ${r * 0.1} Q 0 ${r * 0.26} ${r * 0.16} ${r * 0.1}`, stroke: '#4a2b12',
+      'stroke-width': r * 0.05, fill: 'none', 'stroke-linecap': 'round' }, inner);
+    S('circle', { cx: -r * 0.26, cy: r * 0.08, r: r * 0.07, fill: '#ff9db0', opacity: 0.8 }, inner);
+    S('circle', { cx: r * 0.26, cy: r * 0.08, r: r * 0.07, fill: '#ff9db0', opacity: 0.8 }, inner);
+  }
+  return { g, inner, x, y };
+}
+function tree(p, x, y, s) {
+  const g = S('g', { transform: `translate(${x} ${y}) scale(${s})` }, p);
+  S('rect', { x: -14, y: -40, width: 28, height: 90, rx: 10, fill: '#a0703c' }, g);
+  [[-45, -70, 55, '#4fb548'], [45, -70, 55, '#4fb548'], [0, -110, 65, '#5cc254'], [0, -60, 60, '#58bd50']]
+    .forEach(([cx, cy, r, c]) => S('circle', { cx, cy, r, fill: c }, g));
+  S('circle', { cx: -20, cy: -130, r: 18, fill: '#7fd677', opacity: 0.7 }, g);
+  return g;
+}
+function butterfly(p, color) {
+  const g = S('g', {}, p);
+  const wl = S('g', {}, g), wr = S('g', {}, g);
+  S('ellipse', { cx: -16, cy: -10, rx: 18, ry: 14, fill: color }, wl);
+  S('ellipse', { cx: -12, cy: 10, rx: 12, ry: 10, fill: color, opacity: 0.85 }, wl);
+  S('ellipse', { cx: 16, cy: -10, rx: 18, ry: 14, fill: color }, wr);
+  S('ellipse', { cx: 12, cy: 10, rx: 12, ry: 10, fill: color, opacity: 0.85 }, wr);
+  S('ellipse', { cx: 0, cy: 0, rx: 4, ry: 16, fill: '#3b2a4a' }, g);
+  return { g, wl, wr };
+}
+function sun(p) {
+  const g = S('g', { transform: 'translate(1640 175)' }, p);
+  S('circle', { r: 230, fill: 'url(#sunGlow)' }, g);
+  const rays = S('g', {}, g);
+  for (let i = 0; i < 12; i++) S('rect', { x: -9, y: -150, width: 18, height: 42, rx: 9, fill: '#ffd23b',
+    transform: `rotate(${i * 30})` }, rays);
+  S('circle', { r: 95, fill: '#ffd93b', stroke: '#ffc21a', 'stroke-width': 6 }, g);
+  S('path', { d: 'M -42 -12 Q -30 -26 -18 -12', stroke: '#b86e00', 'stroke-width': 7, fill: 'none', 'stroke-linecap': 'round' }, g);
+  S('path', { d: 'M 18 -12 Q 30 -26 42 -12', stroke: '#b86e00', 'stroke-width': 7, fill: 'none', 'stroke-linecap': 'round' }, g);
+  S('path', { d: 'M -30 22 Q 0 50 30 22', stroke: '#b86e00', 'stroke-width': 7, fill: 'none', 'stroke-linecap': 'round' }, g);
+  S('circle', { cx: -55, cy: 18, r: 14, fill: '#ff9d5c', opacity: 0.6 }, g);
+  S('circle', { cx: 55, cy: 18, r: 14, fill: '#ff9d5c', opacity: 0.6 }, g);
+  return { g, rays };
+}
+
+// ---------- Pip ----------
+function pip(p) {
+  const g = S('g', {}, p);
+  const body = S('g', {}, g);
+  S('ellipse', { cx: 0, cy: 112, rx: 66, ry: 58, fill: '#e8413b' }, body);           // red T-shirt
+  S('path', { d: 'M -22 62 Q 0 80 22 62', stroke: '#c22d28', 'stroke-width': 6, fill: 'none' }, body);
+  const belt = S('path', { d: 'M -52 70 L 46 160', stroke: '#3d4a5c', 'stroke-width': 16, 'stroke-linecap': 'round' }, body);
+  const armL = S('g', {}, g), armR = S('g', {}, g);
+  S('rect', { x: -15, y: -10, width: 30, height: 78, rx: 15, fill: '#222' }, armL);
+  S('circle', { cx: 0, cy: 70, r: 19, fill: '#222' }, armL);
+  S('rect', { x: -15, y: -10, width: 30, height: 78, rx: 15, fill: '#222' }, armR);
+  S('circle', { cx: 0, cy: 70, r: 19, fill: '#222' }, armR);
+  const head = S('g', {}, g);
+  S('circle', { cx: -54, cy: -54, r: 26, fill: '#222' }, head);
+  S('circle', { cx: 54, cy: -54, r: 26, fill: '#222' }, head);
+  S('circle', { cx: -54, cy: -54, r: 12, fill: '#444' }, head);
+  S('circle', { cx: 54, cy: -54, r: 12, fill: '#444' }, head);
+  S('circle', { cx: 0, cy: 0, r: 76, fill: 'url(#pipHead)' }, head);
+  S('ellipse', { cx: -28, cy: -2, rx: 22, ry: 28, fill: '#222', transform: 'rotate(28 -28 -2)' }, head);
+  S('ellipse', { cx: 28, cy: -2, rx: 22, ry: 28, fill: '#222', transform: 'rotate(-28 28 -2)' }, head);
+  const eyes = [];
+  for (const sx of [-1, 1]) {
+    const e = S('g', { transform: `translate(${sx * 27} -4)` }, head);
+    S('circle', { r: 14, fill: '#fff' }, e);
+    S('circle', { cx: 1, cy: 1, r: 10, fill: '#6b3e26' }, e);
+    S('circle', { cx: 1, cy: 1, r: 5, fill: '#1c0f08' }, e);
+    S('circle', { cx: -3, cy: -4, r: 4, fill: '#fff' }, e);
+    const lid = S('rect', { x: -16, y: -16, width: 32, height: 0, fill: '#222' }, e);
+    eyes.push(lid);
+  }
+  S('circle', { cx: -48, cy: 28, r: 15, fill: 'url(#cheek)' }, head);
+  S('circle', { cx: 48, cy: 28, r: 15, fill: 'url(#cheek)' }, head);
+  S('ellipse', { cx: 0, cy: 20, rx: 11, ry: 8, fill: '#222' }, head);
+  const smile = S('path', { d: 'M -14 36 Q 0 48 14 36', stroke: '#222', 'stroke-width': 5, fill: 'none', 'stroke-linecap': 'round' }, head);
+  const mouth = S('g', { transform: 'translate(0 40)' }, head);
+  S('ellipse', { cx: 0, cy: 0, rx: 13, ry: 10, fill: '#7a2333' }, mouth);
+  S('ellipse', { cx: 0, cy: 5, rx: 8, ry: 4, fill: '#ff7a8a' }, mouth);
+  return { g, body, belt, armL, armR, head, eyes, smile, mouth };
+}
+
+// ---------- Sunny the bus ----------
+function bus(p) {
+  const g = S('g', { filter: 'url(#shadow)' }, p);
+  const bob = S('g', {}, g);
+  S('rect', { x: 0, y: -340, width: 780, height: 300, rx: 52, fill: 'url(#busBody)', stroke: '#e3a400', 'stroke-width': 6 }, bob);
+  S('rect', { x: 30, y: -336, width: 700, height: 22, rx: 11, fill: '#fff1a8', opacity: 0.8 }, bob);
+  // Side windows and the windshield.
+  const win = [70, 245, 420];
+  for (const x of win) S('rect', { x, y: -305, width: 140, height: 140, rx: 26, fill: 'url(#glass)', stroke: '#e3a400', 'stroke-width': 6 }, bob);
+  S('rect', { x: 605, y: -312, width: 150, height: 160, rx: 34, fill: '#e9f8ff', stroke: '#e3a400', 'stroke-width': 6 }, bob);
+  const pipSlot = S('g', {}, bob);
+  // Lower panel, drawn over Pip so he sits inside the window.
+  S('path', { d: 'M 0 -165 L 780 -165 L 780 -92 Q 780 -40 728 -40 L 52 -40 Q 0 -40 0 -92 Z', fill: '#ffc928', stroke: '#e3a400', 'stroke-width': 6 }, bob);
+  S('rect', { x: 0, y: -170, width: 780, height: 16, fill: '#ff8a2a' }, bob);
+  // Rainbow emblem.
+  const rb = S('g', { transform: 'translate(330 -58)' }, bob);
+  ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa'].forEach((c, i) => {
+    const r = 78 - i * 10;
+    S('path', { d: `M ${-r} 0 A ${r} ${r} 0 0 1 ${r} 0`, stroke: c, 'stroke-width': 10, fill: 'none', 'stroke-linecap': 'round' }, rb);
+  });
+  // Face: one big blue eye on the windshield, a smile on the front.
+  const eye = S('g', { transform: 'translate(680 -232)' }, bob);
+  S('ellipse', { rx: 50, ry: 56, fill: '#fff', stroke: '#2b3a55', 'stroke-width': 5 }, eye);
+  const iris = S('g', {}, eye);
+  S('circle', { r: 31, fill: '#2f7de1' }, iris);
+  S('circle', { r: 31, fill: 'none', stroke: '#1f5fb5', 'stroke-width': 5 }, iris);
+  S('circle', { r: 15, fill: '#0d1b33' }, iris);
+  S('circle', { cx: -10, cy: -12, r: 9, fill: '#fff' }, iris);
+  S('circle', { cx: 10, cy: 10, r: 4, fill: '#fff', opacity: 0.8 }, iris);
+  const lid = S('rect', { x: -56, y: -60, width: 112, height: 0, rx: 20, fill: '#ffcf33' }, eye);
+  S('path', { d: 'M -42 -78 Q 0 -98 42 -80', stroke: '#2b3a55', 'stroke-width': 9, fill: 'none', 'stroke-linecap': 'round' }, eye);
+  S('circle', { cx: 755, cy: -118, r: 20, fill: '#fff7c9', stroke: '#e3a400', 'stroke-width': 5 }, bob);
+  const smile = S('path', { d: 'M 640 -98 Q 690 -66 738 -96', stroke: '#2b3a55', 'stroke-width': 8, fill: 'none', 'stroke-linecap': 'round' }, bob);
+  const mouth = S('g', { transform: 'translate(690 -88)' }, bob);
+  S('ellipse', { rx: 34, ry: 18, fill: '#5a1d2c' }, mouth);
+  S('ellipse', { cy: 8, rx: 20, ry: 8, fill: '#ff7a8a' }, mouth);
+  S('rect', { x: 690, y: -60, width: 100, height: 22, rx: 11, fill: '#9aa5b1' }, bob);
+  S('rect', { x: -10, y: -60, width: 70, height: 22, rx: 11, fill: '#9aa5b1' }, bob);
+  // Wheels.
+  const wheels = [150, 600].map((x) => {
+    const w = S('g', { transform: `translate(${x} -40)` }, g);
+    S('circle', { r: 66, fill: '#2e3440' }, w);
+    S('circle', { r: 50, fill: '#3b4252' }, w);
+    const hub = S('g', {}, w);
+    S('circle', { r: 30, fill: '#d8dee9' }, hub);
+    for (let i = 0; i < 5; i++) S('circle', { cx: Math.cos(i * 1.2566) * 18, cy: Math.sin(i * 1.2566) * 18, r: 5, fill: '#8f99a8' }, hub);
+    S('circle', { r: 8, fill: '#8f99a8' }, hub);
+    return hub;
+  });
+  return { g, bob, pipSlot, iris, lid, smile, mouth, wheels };
+}
+
+function init(timeline) {
+  T = timeline;
+  svg = document.getElementById('svg');
+  defs();
+  const world = S('g', {}, svg);
+  R.world = world;
+  S('rect', { x: -2400, y: -1600, width: 6800, height: 4400, fill: 'url(#sky)' }, world);
+  R.sun = sun(world);
+  R.clouds = [cloud(world, 200, 160, 0.9), cloud(world, 900, 110, 0.7), cloud(world, 1350, 260, 0.55),
+    cloud(world, -400, 240, 0.8), cloud(world, 2100, 150, 0.85)];
+
+  // Rainbow Valley (scenes 1 and 3).
+  const valley = S('g', {}, world);
+  R.valley = valley;
+  S('path', { d: hillPath(640, 40, 0.004, 1), fill: 'url(#hill1)' }, valley);
+  [[160, 640, 0.9], [420, 615, 0.7], [1180, 620, 0.8], [1500, 655, 0.75], [-200, 640, 0.8], [2100, 640, 0.8]]
+    .forEach(([x, y, s]) => tree(valley, x, y, s));
+  S('path', { d: hillPath(735, 35, 0.0035, 3), fill: 'url(#hill2)' }, valley);
+  S('path', { d: 'M -2400 905 Q 960 860 4400 905 L 4400 1000 Q 960 960 -2400 1000 Z', fill: '#f2dcaa' }, valley);
+  S('path', { d: hillPath(1000, 10, 0.006, 0), fill: 'url(#hill3)' }, valley);
+  const r1 = rng(3), colors = ['#ff6b9a', '#ffd43b', '#b07cff', '#ffffff', '#ff8a3d', '#5ec8ff'];
+  R.flowers = [];
+  for (let i = 0; i < 46; i++) {
+    const x = -300 + r1() * 2500, y = r1() < 0.5 ? 770 + r1() * 90 : 1012 + r1() * 60;
+    R.flowers.push(flower(valley, x, y, 12 + r1() * 10, colors[Math.floor(r1() * colors.length)]));
+  }
+
+  // Garden of red flowers (scene 3), in front of the valley.
+  const garden = S('g', {}, world);
+  R.garden = garden;
+  S('ellipse', { cx: 470, cy: 900, rx: 330, ry: 120, fill: '#3f9a2c' }, garden);
+  const r2 = rng(11);
+  for (let i = 0; i < 22; i++) flower(garden, 200 + r2() * 540, 820 + r2() * 120, 16 + r2() * 8, '#e53935');
+  R.bigFlowers = [[300, 640, 92], [480, 560, 104], [660, 650, 90]].map(([x, y, r], i) => {
+    const stem = S('g', {}, garden);
+    S('path', { d: `M ${x} ${y} Q ${x + (i - 1) * 30} ${y + 160} ${x - 10} 930`, stroke: '#3e9b35', 'stroke-width': 14, fill: 'none', 'stroke-linecap': 'round' }, stem);
+    S('ellipse', { cx: x - 40, cy: y + 170, rx: 44, ry: 18, fill: '#4cb043', transform: `rotate(-30 ${x - 40} ${y + 170})` }, stem);
+    S('ellipse', { cx: x + 38, cy: y + 210, rx: 44, ry: 18, fill: '#4cb043', transform: `rotate(30 ${x + 38} ${y + 210})` }, stem);
+    return { stem, f: flower(garden, x, y, r, '#e53935', true, 7) };
+  });
+
+  // The rainbow road (scene 2).
+  const road = S('g', {}, world);
+  R.road = road;
+  S('path', { d: hillPath(560, 45, 0.003, 0.5), fill: 'url(#hill1)' }, road);
+  R.roadTrees = S('g', {}, road);
+  for (let i = 0; i < 10; i++) tree(R.roadTrees, i * 520, 600, 0.75);
+  S('path', { d: hillPath(700, 30, 0.004, 2), fill: 'url(#hill2)' }, road);
+  R.roadFlowers = S('g', {}, road);
+  const r3 = rng(5);
+  for (let i = 0; i < 40; i++) flower(R.roadFlowers, i * 110, 860 - r3() * 40, 15 + r3() * 8, colors[i % colors.length]);
+  ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#3949ab', '#8e24aa'].forEach((c, i) =>
+    S('rect', { x: -2400, y: 905 + i * 26, width: 6800, height: 27, fill: c }, road));
+  R.dashes = S('g', {}, road);
+  for (let i = 0; i < 40; i++) S('rect', { x: i * 160, y: 984, width: 80, height: 10, rx: 5, fill: '#fff', opacity: 0.85 }, R.dashes);
+
+  R.bus = bus(world);
+  R.pip = pip(R.bus.pipSlot);
+  R.flies = ['#ff8fc7', '#ffb347', '#8fd3ff', '#c49bff'].map((c) => butterfly(world, c));
+
+  // Screen-space overlays.
+  const over = S('g', {}, svg);
+  R.red = S('g', {}, over);
+  R.redText = S('text', { x: 0, y: 0, 'text-anchor': 'middle', 'font-family': 'Fredoka', 'font-weight': 700, 'font-size': 230,
+    fill: '#e53935', stroke: '#fff', 'stroke-width': 18, 'paint-order': 'stroke', filter: 'url(#textShadow)' }, R.red);
+  R.redText.textContent = 'RED';
+  R.dots = [0, 1, 2].map((i) => S('circle', { cx: 290 + i * 62, cy: -62, r: 17, fill: '#fff', stroke: '#e53935', 'stroke-width': 6 }, R.red));
+  R.sparkles = [];
+  const r4 = rng(21);
+  for (let i = 0; i < 16; i++) {
+    const s = S('path', { d: 'M 0 -26 Q 4 -4 26 0 Q 4 4 0 26 Q -4 4 -26 0 Q -4 -4 0 -26 Z', fill: i % 2 ? '#fff6a8' : '#ffffff' }, over);
+    R.sparkles.push({ el: s, x: 960 + (r4() - 0.5) * 900, y: 240 + (r4() - 0.5) * 300, d: r4() * 0.5, s: 0.6 + r4() * 0.8 });
+  }
+
+  // Title card.
+  const title = S('g', {}, svg);
+  R.title = title;
+  S('rect', { width: 1920, height: 1080, fill: 'url(#sky)' }, title);
+  R.titleArc = S('g', { transform: 'translate(960 900)' }, title);
+  ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa'].forEach((c, i) => {
+    const r = 640 - i * 46;
+    S('path', { d: `M ${-r} 0 A ${r} ${r} 0 0 1 ${r} 0`, stroke: c, 'stroke-width': 48, fill: 'none' }, R.titleArc);
+  });
+  R.titleClouds = [cloud(title, 260, 860, 1.1), cloud(title, 1500, 860, 1.1)];
+  R.titleWords = [['Rainbow', 470, 150], ['Rescue Bus', 650, 170]].map(([w, y, size]) => {
+    const t = S('text', { x: 960, y, 'text-anchor': 'middle', 'font-family': 'Fredoka', 'font-weight': 700, 'font-size': size,
+      fill: '#fff', stroke: '#e53935', 'stroke-width': 16, 'paint-order': 'stroke', filter: 'url(#shadow)' }, title);
+    t.textContent = w;
+    return t;
+  });
+
+  R.flash = S('rect', { width: 1920, height: 1080, fill: '#fff', opacity: 0 }, svg);
+}
+
+// Loudness of whoever is talking, 0..1, for the mouths.
+function amp(who, t) {
+  let a = 0;
+  for (const l of Object.values(T.lines)) {
+    if (l.who !== who) continue;
+    const i = Math.floor((t - l.start) * T.fps);
+    if (i >= 0 && i < l.env.length) a = Math.max(a, l.env[i]);
+  }
+  return a;
+}
+function speaking(who, t) {
+  return Object.values(T.lines).some((l) => l.who === who && t >= l.start && t <= l.start + l.dur);
+}
+
+function blink(t, period, offset) {
+  const k = ((t + offset) % period) / 0.16;
+  return k < 1 ? Math.sin(k * Math.PI) : 0;
+}
+
+function setPip(t, opts) {
+  const P = R.pip;
+  tf(P.g, `translate(${opts.x} ${opts.y}) scale(${opts.s}) rotate(${opts.tilt || 0})`);
+  show(P.g, opts.s > 0.01);
+  show(P.belt, !!opts.belt);
+  const lidH = 32 * blink(t, 3.4, 0.7);
+  P.eyes.forEach((lid) => lid.setAttribute('height', lidH));
+  const a = amp('pip', t);
+  const talking = a > 0.08;
+  show(P.mouth, talking);
+  show(P.smile, !talking);
+  tf(P.mouth, `translate(0 40) scale(1 ${0.25 + a * 1.1})`);
+  // Head bobs a little while talking.
+  tf(P.head, `rotate(${talking ? Math.sin(t * 7) * 3 : Math.sin(t * 1.6) * 2})`);
+  tf(P.armR, `translate(58 70) rotate(${opts.armR ?? 10})`);
+  tf(P.armL, `translate(-58 70) rotate(${opts.armL ?? -10})`);
+  show(P.armR, opts.armR !== null);
+  show(P.armL, opts.armL !== null);
+}
+
+function setBus(t, x, y, dist) {
+  const B = R.bus;
+  const moving = Math.abs(dist - (setBus.last ?? dist)) > 0.01;
+  setBus.last = dist;
+  tf(B.g, `translate(${x} ${y})`);
+  tf(B.bob, `translate(0 ${moving ? Math.sin(t * 18) * 3 : Math.sin(t * 2.2) * 1.5})`);
+  B.wheels.forEach((w) => tf(w, `rotate(${(dist / 66) * 57.3})`));
+  tf(B.iris, `translate(${-6 + Math.sin(t * 0.8) * 4} ${4})`);
+  B.lid.setAttribute('height', 120 * blink(t, 4.1, 2.0));
+  const a = amp('sunny', t);
+  const talking = a > 0.08;
+  show(B.mouth, talking);
+  show(B.smile, !talking);
+  tf(B.mouth, `translate(690 -88) scale(1 ${0.3 + a * 1.0})`);
+}
+
+function camera(z, cx, cy) {
+  tf(R.world, `translate(960 540) scale(${z}) translate(${-cx} ${-cy})`);
+}
+
+function ambient(t, scroll = 0) {
+  tf(R.sun.rays, `rotate(${t * 8})`);
+  tf(R.sun.g, `translate(1640 ${175 + Math.sin(t * 1.2) * 6})`);
+  R.clouds.forEach((c, i) => {
+    let x = c.x + t * (14 + i * 4) - scroll * 0.05;
+    x = ((x + 800) % 3300 + 3300) % 3300 - 800;
+    tf(c.g, `translate(${x} ${c.y})`);
+  });
+  R.flowers.forEach((f, i) => tf(f.inner, `rotate(${Math.sin(t * 1.8 + i) * 8})`));
+  R.flies.forEach((f, i) => {
+    const bx = [300, 1500, 900, 1250][i], by = [520, 470, 380, 600][i];
+    const x = bx + Math.sin(t * 0.6 + i * 2) * 220 - scroll * 0.2 * (i % 2);
+    const y = by + Math.sin(t * 1.3 + i) * 60;
+    tf(f.g, `translate(${x} ${y}) rotate(${Math.sin(t * 2 + i) * 15}) scale(1.8)`);
+    const flap = 0.25 + 0.75 * Math.abs(Math.sin(t * 13 + i));
+    tf(f.wl, `scale(${flap} 1)`);
+    tf(f.wr, `scale(${flap} 1)`);
+  });
+}
+
+function render(t) {
+  const sc = T.scenes;
+  // White flash between scenes.
+  let flash = 0;
+  for (const s of [sc.s1.start, sc.s2.start, sc.s3.start]) flash = Math.max(flash, 1 - Math.abs(t - s) / 0.35);
+  R.flash.setAttribute('opacity', clamp(flash));
+
+  // Title.
+  show(R.title, t < sc.s1.start);
+  if (t < sc.s1.start) {
+    const k = backOut(seg(t, 0.1, 1.0));
+    tf(R.titleArc, `translate(960 900) scale(${k})`);
+    R.titleWords.forEach((w, i) => {
+      const kk = backOut(seg(t, 0.5 + i * 0.35, 1.2 + i * 0.35));
+      tf(w, `translate(960 ${[470, 650][i]}) scale(${kk}) translate(-960 ${-[470, 650][i]}) translate(0 ${Math.sin(t * 3 + i) * 6})`);
+    });
+    R.titleClouds.forEach((c, i) => tf(c.g, `translate(${c.x + Math.sin(t + i) * 20} ${c.y})`));
+    return;
+  }
+
+  const inS1 = t < sc.s2.start, inS2 = !inS1 && t < sc.s3.start, inS3 = t >= sc.s3.start;
+  show(R.valley, !inS2);
+  show(R.garden, inS3);
+  show(R.road, inS2);
+  show(R.red, false);
+  R.sparkles.forEach((s) => show(s.el, false));
+
+  if (inS1) {
+    const u = t - sc.s1.start, d = sc.s1.dur;
+    const enter = easeOut(seg(u, 0.2, 3.4));
+    const leave = easeIn(seg(u, d - 1.4, d));
+    const x = lerp(-900, 420, enter) + leave * 1500;
+    ambient(t);
+    setBus(t, x, 935, x);
+    const pop = backOut(seg(t, T.cues.pop, T.cues.pop + 0.45));
+    const waving = t > T.cues.pop + 0.3 && t < T.lines.s1a.start + T.lines.s1a.dur + 0.4;
+    setPip(t, { x: 490, y: -262, s: pop, armR: waving ? -150 + Math.sin(t * 9) * 25 : 10, armL: -10 });
+    // Wide, then toward Pip's face while he talks, then back for Sunny.
+    const pipX = x + 490, pipY = 935 - 262;
+    const zin = ease(seg(t, T.lines.s1a.start + 0.2, T.lines.s1a.start + 1.6));
+    const zout = ease(seg(t, T.lines.s1b.start - 0.5, T.lines.s1b.start + 0.5));
+    const z = 1 + zin * 0.85 - zout * 0.6;
+    const cx = lerp(960, pipX + 60, zin * (1 - zout)) + zout * (x + 560 - 960) * 0.6;
+    const cy = lerp(540, pipY + 40, zin * (1 - zout)) + zout * 40;
+    camera(z, cx, cy);
+  } else if (inS2) {
+    const u = t - sc.s2.start;
+    const scroll = u * 340;
+    ambient(t, scroll);
+    tf(R.roadFlowers, `translate(${-(scroll % 1100) - 200} 0)`);
+    tf(R.roadTrees, `translate(${-((scroll * 0.4) % 520) - 300} 0)`);
+    tf(R.dashes, `translate(${-(scroll % 160) - 400} 0)`);
+    setBus(t, 560, 935, scroll);
+    setPip(t, { x: 490, y: -250, s: 0.82, belt: true, armR: null, armL: null, tilt: Math.sin(t * 2) * 2 });
+    // Side tracking, easing in toward the bus as Sunny speaks.
+    const k = ease(seg(t, T.lines.s2b.start - 0.4, T.lines.s2b.start + 0.8));
+    camera(1 + k * 0.35, 960 + k * 120, 540 + k * 60);
+  } else {
+    const u = t - sc.s3.start, d = sc.s3.dur;
+    ambient(t);
+    const settle = easeOut(seg(u, 0, 1.2));
+    const x = lerp(1250, 1020, settle);
+    setBus(t, x, 935, x);
+    const pointing = t > T.lines.s3a.start - 0.2;
+    setPip(t, { x: 490, y: -262, s: 0.9, armL: pointing ? 115 + Math.sin(t * 3) * 6 : -10, armR: 10 });
+    R.bigFlowers.forEach((b, i) => {
+      const sway = Math.sin(t * 1.5 + i * 1.3) * 4;
+      tf(b.f.g, `translate(${b.f.x} ${b.f.y}) rotate(${sway}) scale(${1 + 0.04 * Math.sin(t * 3 + i)})`);
+    });
+    // Close-up on the flowers when Pip says RED, back out for "beautiful red".
+    const zin = ease(seg(t, T.cues.redWord - 0.3, T.cues.redWord + 0.9));
+    const zout = ease(seg(t, T.lines.s3c.start + 0.2, T.lines.s3c.start + 1.6));
+    const k = zin * (1 - zout);
+    camera(1 + k * 0.9, lerp(960, 480, k), lerp(540, 690, k));
+    // RED, big, with sparkles; dots count the pause for children to answer.
+    const showRed = t >= T.cues.redWord;
+    show(R.red, showRed);
+    if (showRed) {
+      const pop = backOut(seg(t, T.cues.redWord, T.cues.redWord + 0.5));
+      const pulse = t > T.cues.ask && t < T.cues.answer + 2.2 ? 1 + 0.06 * Math.sin((t - T.cues.ask) * 9) : 1;
+      const fade = 1 - seg(t, sc.s3.start + d - 0.9, sc.s3.start + d - 0.3);
+      tf(R.red, `translate(960 205) scale(${pop * pulse * fade})`);
+      R.dots.forEach((dot, i) => {
+        const a = t - (T.cues.answer + i * 0.6);
+        const on = a > 0 && t < T.lines.s3c.start;
+        show(dot, on);
+        tf(dot, `scale(${on ? backOut(clamp(a / 0.3)) : 0})`);
+        dot.setAttribute('transform-origin', `${290 + i * 62} -62`);
+      });
+    }
+    for (const cue of [T.cues.redWord, T.cues.sparkle]) {
+      R.sparkles.forEach((s) => {
+        const a = (t - cue - s.d) / 0.9;
+        if (a > 0 && a < 1) {
+          show(s.el, true);
+          tf(s.el, `translate(${s.x} ${s.y}) rotate(${a * 90}) scale(${Math.sin(a * Math.PI) * s.s})`);
+        }
+      });
+    }
+  }
+}
+</script>
+</body>
+</html>

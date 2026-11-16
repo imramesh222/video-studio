@@ -1,0 +1,8 @@
+{
+  "name": "video-studio",
+  "private": true,
+  "description": "Free tools for making videos with code: 3D/2D cartoons, channel art, app demo recordings.",
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}

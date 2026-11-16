@@ -1,0 +1,36 @@
+appId: host.exp.Exponent
+---
+- tapOn:
+    id: tab-home
+- runFlow: { file: pause.yaml, env: { MS: "1500" } }
+- tapOn:
+    id: qr-card
+- runFlow: { file: pause.yaml, env: { MS: "2200" } }
+- tapOn:
+    id: close-qr
+- runFlow: { file: pause.yaml, env: { MS: "600" } }
+- tapOn:
+    id: tab-renew
+- runFlow: { file: pause.yaml, env: { MS: "1200" } }
+- tapOn: "1 month, Rs 2,500"
+- runFlow: { file: pause.yaml, env: { MS: "600" } }
+- tapOn: "eSewa"
+- waitForAnimationToEnd
+- tapOn:
+    id: transaction-ref
+- inputText: ${REF}
+- runFlow: /Users/rameshrawat/gymbahi/mobile/e2e/subflows/dismiss-keyboard.yaml
+- runFlow: { file: pause.yaml, env: { MS: "500" } }
+- tapOn:
+    id: ive-paid
+- extendedWaitUntil:
+    visible: "Sent — waiting for the gym to confirm"
+    timeout: 20000
+- extendedWaitUntil:
+    notVisible: "Sent — waiting for the gym to confirm"
+    timeout: 30000
+    optional: true
+- runFlow: { file: pause.yaml, env: { MS: "2500" } }
+- tapOn:
+    id: tab-payments
+- runFlow: { file: pause.yaml, env: { MS: "3000" } }

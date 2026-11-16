@@ -1,0 +1,174 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; background: transparent; font-family: Fredoka, sans-serif; }
+  svg { display: block; }
+</style>
+</head>
+<body>
+<svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg>
+<script>
+// Lumi Land brand art: draw('profile' | 'banner' | 'watermark').
+const NS = 'http://www.w3.org/2000/svg';
+function S(tag, a = {}, p) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in a) e.setAttribute(k, a[k]);
+  if (p) p.appendChild(e);
+  return e;
+}
+const RAINBOW = ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa'];
+
+function defs(svg) {
+  const d = S('defs', {}, svg);
+  const lin = (id, stops, y2 = 1) => {
+    const g = S('linearGradient', { id, x1: 0, y1: 0, x2: 0, y2 }, d);
+    stops.forEach(([o, c]) => S('stop', { offset: o, 'stop-color': c }, g));
+  };
+  lin('sky', [[0, '#4fb2fb'], [0.6, '#9fdcff'], [1, '#e4f7ff']]);
+  lin('hill1', [[0, '#a8e68a'], [1, '#86d066']]);
+  lin('hill2', [[0, '#8ad86a'], [1, '#62bf45']]);
+  lin('hill3', [[0, '#6fcd4f'], [1, '#48a832']]);
+  lin('starFill', [[0, '#ffe56b'], [1, '#ffc21a']]);
+  const glow = S('radialGradient', { id: 'glow' }, d);
+  [[0, '#fff6b0', 0.95], [0.45, '#ffe46b', 0.45], [1, '#ffe46b', 0]].forEach(([o, c, op]) =>
+    S('stop', { offset: o, 'stop-color': c, 'stop-opacity': op }, glow));
+  const f = S('filter', { id: 'shadow', x: '-30%', y: '-30%', width: '160%', height: '170%' }, d);
+  S('feDropShadow', { dx: 0, dy: 10, stdDeviation: 10, 'flood-color': '#1b3a5a', 'flood-opacity': 0.25 }, f);
+  const ft = S('filter', { id: 'textShadow', x: '-10%', y: '-30%', width: '120%', height: '170%' }, d);
+  S('feDropShadow', { dx: 0, dy: 8, stdDeviation: 6, 'flood-color': '#16325c', 'flood-opacity': 0.3 }, ft);
+}
+
+// Lumi, the little star of Lumi Land: a soft, smiling, glowing star.
+function star(p, cx, cy, r, glow = true) {
+  const g = S('g', { transform: `translate(${cx} ${cy})` }, p);
+  if (glow) S('circle', { r: r * 1.9, fill: 'url(#glow)' }, g);
+  const pts = [];
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 ? r * 0.5 : r;
+    pts.push(`${(Math.cos(a) * rr).toFixed(1)},${(Math.sin(a) * rr * 0.98 + r * 0.06).toFixed(1)}`);
+  }
+  // A thick round stroke in the same colour rounds the points.
+  S('polygon', { points: pts.join(' '), fill: 'url(#starFill)', stroke: '#ffc21a', 'stroke-width': r * 0.32, 'stroke-linejoin': 'round', filter: 'url(#shadow)' }, g);
+  S('polygon', { points: pts.join(' '), fill: 'none', stroke: '#ffe06a', 'stroke-width': r * 0.22, 'stroke-linejoin': 'round' }, g);
+  S('polygon', { points: pts.join(' '), fill: 'url(#starFill)' }, g);
+  S('ellipse', { cx: -r * 0.3, cy: -r * 0.38, rx: r * 0.16, ry: r * 0.09, fill: '#fff8cf', opacity: 0.9, transform: `rotate(-35 ${-r * 0.3} ${-r * 0.38})` }, g);
+  for (const sx of [-1, 1]) {
+    const e = S('g', { transform: `translate(${sx * r * 0.2} ${r * 0.08})` }, g);
+    S('ellipse', { rx: r * 0.085, ry: r * 0.11, fill: '#4a2b12' }, e);
+    S('circle', { cx: -r * 0.025, cy: -r * 0.04, r: r * 0.035, fill: '#fff' }, e);
+    S('circle', { cx: r * 0.025, cy: r * 0.04, r: r * 0.015, fill: '#fff' }, e);
+  }
+  S('path', { d: `M ${-r * 0.13} ${r * 0.27} Q 0 ${r * 0.42} ${r * 0.13} ${r * 0.27}`, stroke: '#4a2b12', 'stroke-width': r * 0.055, fill: 'none', 'stroke-linecap': 'round' }, g);
+  for (const sx of [-1, 1]) S('ellipse', { cx: sx * r * 0.36, cy: r * 0.26, rx: r * 0.09, ry: r * 0.06, fill: '#ff9d7a', opacity: 0.75 }, g);
+  return g;
+}
+function rainbow(p, cx, cy, r, band) {
+  const g = S('g', { transform: `translate(${cx} ${cy})` }, p);
+  RAINBOW.forEach((c, i) => {
+    const rr = r - i * band;
+    S('path', { d: `M ${-rr} 0 A ${rr} ${rr} 0 0 1 ${rr} 0`, stroke: c, 'stroke-width': band + 1, fill: 'none' }, g);
+  });
+  return g;
+}
+function cloud(p, x, y, s) {
+  const g = S('g', { transform: `translate(${x} ${y}) scale(${s})` }, p);
+  const parts = [[0, 0, 70], [80, -30, 85], [170, 0, 70], [90, 25, 70], [-60, 20, 50], [230, 25, 50]];
+  parts.forEach(([cx, cy, r]) => S('circle', { cx, cy: cy + 9, r, fill: '#cfe6f7' }, g));
+  parts.forEach(([cx, cy, r]) => S('circle', { cx, cy, r, fill: '#fff' }, g));
+  return g;
+}
+function hill(p, w, y, amp, freq, phase, fill) {
+  let d = `M -50 ${y + 2000} L -50 ${y}`;
+  for (let x = -50; x <= w + 50; x += 20) d += ` L ${x} ${(y + amp * Math.sin(x * freq + phase)).toFixed(1)}`;
+  S('path', { d: d + ` L ${w + 50} ${y + 2000} Z`, fill }, p);
+}
+function flower(p, x, y, r, color) {
+  const g = S('g', { transform: `translate(${x} ${y})` }, p);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    S('circle', { cx: Math.cos(a) * r * 0.62, cy: Math.sin(a) * r * 0.62, r: r * 0.48, fill: color }, g);
+  }
+  S('circle', { r: r * 0.42, fill: '#ffd43b' }, g);
+}
+function butterfly(p, x, y, s, color, rot) {
+  const g = S('g', { transform: `translate(${x} ${y}) rotate(${rot}) scale(${s})` }, p);
+  [[-16, -10, 18, 14], [-12, 10, 12, 10], [16, -10, 18, 14], [12, 10, 12, 10]].forEach(([cx, cy, rx, ry]) =>
+    S('ellipse', { cx, cy, rx, ry, fill: color }, g));
+  S('ellipse', { rx: 4, ry: 16, fill: '#3b2a4a' }, g);
+}
+function sparkle(p, x, y, s, c = '#fff') {
+  S('path', { d: 'M 0 -26 Q 4 -4 26 0 Q 4 4 0 26 Q -4 4 -26 0 Q -4 -4 0 -26 Z', fill: c, transform: `translate(${x} ${y}) scale(${s})` }, p);
+}
+// "Lumi Land" in rainbow letters with a thick white outline.
+function title(p, x, y, size, anchor = 'start') {
+  const t = S('text', { x, y, 'font-family': 'Fredoka', 'font-weight': 700, 'font-size': size, 'text-anchor': anchor,
+    stroke: '#fff', 'stroke-width': size * 0.13, 'paint-order': 'stroke', 'stroke-linejoin': 'round', filter: 'url(#textShadow)',
+    'letter-spacing': size * 0.01 }, p);
+  const colors = ['#e53935', '#fb8c00', '#f2b705', '#43a047', null, '#1e88e5', '#8e24aa', '#e53935', '#fb8c00'];
+  [...'Lumi Land'].forEach((ch, i) => {
+    const s = S('tspan', { fill: colors[i] || '#fff' }, t);
+    s.textContent = ch;
+  });
+  return t;
+}
+
+function scenery(p, w, h, hillY) {
+  S('rect', { width: w, height: h, fill: 'url(#sky)' }, p);
+  hill(p, w, hillY, h * 0.025, 0.004, 1, 'url(#hill1)');
+  hill(p, w, hillY + h * 0.08, h * 0.02, 0.0035, 3, 'url(#hill2)');
+  hill(p, w, hillY + h * 0.15, h * 0.012, 0.005, 0, 'url(#hill3)');
+}
+
+function draw(kind) {
+  const svg = document.getElementById('svg');
+  svg.innerHTML = '';
+  defs(svg);
+  if (kind === 'profile') {
+    // 800x800, shown as a circle: everything inside the middle.
+    svg.setAttribute('width', 800); svg.setAttribute('height', 800); svg.setAttribute('viewBox', '0 0 800 800');
+    scenery(svg, 800, 800, 610);
+    rainbow(svg, 400, 520, 330, 30);
+    cloud(svg, 90, 500, 0.7);
+    cloud(svg, 590, 500, 0.7);
+    star(svg, 400, 330, 175);
+    sparkle(svg, 175, 215, 0.9);
+    sparkle(svg, 630, 230, 0.7, '#fff6a8');
+    title(svg, 400, 668, 100, 'middle');
+  } else if (kind === 'watermark') {
+    svg.setAttribute('width', 150); svg.setAttribute('height', 150); svg.setAttribute('viewBox', '0 0 150 150');
+    star(svg, 75, 72, 52, false);
+  } else {
+    // 2560x1440. Phones show only the middle 1546x423 (x 507-2053, y 508-931).
+    const W = 2560, H = 1440;
+    svg.setAttribute('width', W); svg.setAttribute('height', H); svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    scenery(svg, W, H, 980);
+    rainbow(svg, 1280, 1060, 1080, 64);
+    S('circle', { cx: 2250, cy: 260, r: 120, fill: '#ffd93b' }, svg);
+    [[180, 300, 1.2], [700, 170, 0.9], [1650, 150, 0.8], [2050, 360, 1.0], [-60, 620, 1.1], [2280, 640, 1.2], [1020, 1000, 0.9], [1520, 1010, 0.9]]
+      .forEach(([x, y, s]) => cloud(svg, x, y, s));
+    const cols = ['#ff6b9a', '#ffd43b', '#b07cff', '#ffffff', '#ff8a3d', '#5ec8ff', '#e53935'];
+    let k = 0;
+    for (let x = 30; x < W; x += 95) {
+      flower(svg, x + ((k * 37) % 40), 1180 + ((k * 53) % 160), 18 + (k % 4) * 4, cols[k % cols.length]);
+      k++;
+    }
+    butterfly(svg, 430, 820, 2.2, '#ff8fc7', -15);
+    butterfly(svg, 2160, 820, 2.0, '#8fd3ff', 12);
+    // Logo and name, inside the strip every device shows.
+    star(svg, 815, 715, 165);
+    title(svg, 1030, 745, 210);
+    const tag = S('text', { x: 1040, y: 850, 'font-family': 'Fredoka', 'font-weight': 600, 'font-size': 50, fill: '#1f4f8a',
+      stroke: '#fff', 'stroke-width': 12, 'paint-order': 'stroke', 'stroke-linejoin': 'round' }, svg);
+    tag.textContent = 'Colours, songs and stories for little ones';
+    sparkle(svg, 640, 560, 1.1);
+    sparkle(svg, 1960, 600, 0.9, '#fff6a8');
+    sparkle(svg, 1010, 560, 0.7);
+  }
+}
+</script>
+</body>
+</html>

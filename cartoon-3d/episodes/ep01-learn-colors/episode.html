@@ -1,0 +1,1257 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #000; font-family: Fredoka, sans-serif; }
+  canvas { position: absolute; inset: 0; }
+  .ov { position: absolute; inset: 0; pointer-events: none; }
+  #title { display: flex; flex-direction: column; align-items: center; padding-top: 250px; }
+  #title div { font-weight: 700; color: #fff; text-shadow: 0 8px 0 #c62828, 0 14px 24px rgba(0,0,0,.25); line-height: 1; }
+  #word { text-align: center; padding-top: 40px; font-weight: 700; font-size: 220px; -webkit-text-stroke: 16px #fff; paint-order: stroke fill; }
+  #word span.w { display: inline-block; text-shadow: 0 10px 18px rgba(0,0,0,.28); }
+  .dot { display: inline-block; width: 34px; height: 34px; border-radius: 50%; background: #fff; border: 6px solid currentColor;
+    vertical-align: middle; margin-left: 26px; position: relative; top: -60px; box-sizing: border-box; }
+  #num { position: absolute; top: 60px; right: 120px; width: 260px; height: 260px; border-radius: 50%; background: #fff;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 190px; box-shadow: 0 14px 30px rgba(0,0,0,.25); }
+  #end { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  #end .t { font-weight: 700; color: #fff; -webkit-text-stroke: 14px #e53935; paint-order: stroke fill; text-shadow: 0 12px 26px rgba(0,0,0,.3); line-height: 1.05; }
+  #end .brand { margin-top: 30px; display: flex; align-items: center; gap: 18px; font-weight: 700; font-size: 64px; color: #fff;
+    text-shadow: 0 6px 14px rgba(0,0,0,.35); }
+  .spark { position: absolute; width: 52px; height: 52px; }
+  #flash { background: #fff; opacity: 0; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<div class="ov" id="title"><div style="font-size:150px">Rainbow</div><div style="font-size:170px;margin-top:10px">Rescue Bus</div></div>
+<div class="ov" id="wordWrap"><div id="word"><span class="w" id="wordText">RED</span><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>
+<div class="ov" id="numWrap"><div id="num">1</div></div>
+<div class="ov" id="end"><div class="t" id="end1" style="font-size:132px">THANK YOU<br>FOR WATCHING!</div>
+  <div class="t" id="end2" style="font-size:96px;margin-top:24px;-webkit-text-stroke-color:#1e88e5">SUBSCRIBE FOR MORE<br>FUN ADVENTURES!</div>
+  <div class="brand" id="brand"><img src="../../lib/lumi-star.png" width="110" height="110">Lumi Land</div></div>
+<div class="ov" id="sparks"></div>
+<div class="ov" id="flash"></div>
+<script src="../../lib/three.min.js"></script>
+<script>
+// Rainbow Rescue Bus, episode 1, in 3D. render(t) draws the exact frame at t seconds.
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const ease = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const easeOut = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const easeIn = (x) => Math.pow(clamp(x), 3);
+const backOut = (x) => { x = clamp(x); const c1 = 2.2, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, k) => a + (b - a) * k;
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const COLORS = { red: '#e53935', yellow: '#f2b705', green: '#43a047', blue: '#1e88e5' };
+function rng(seed) {
+  return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+
+THREE.ColorManagement.legacyMode = false;
+let T, VIS, renderer, scene, cam, R = {}, SC = {};
+
+const mat = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0, ...o });
+function mesh(geo, material, parent, pos = [0, 0, 0], scale) {
+  const m = new THREE.Mesh(geo, material);
+  m.position.set(...pos);
+  if (scale) m.scale.set(...scale);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  if (parent) parent.add(m);
+  return m;
+}
+const sphere = (r, seg = 32) => new THREE.SphereGeometry(r, seg, Math.round(seg * 0.75));
+const group = (parent, pos = [0, 0, 0]) => { const g = new THREE.Group(); g.position.set(...pos); if (parent) parent.add(g); return g; };
+function roundedShape(w, h, r, cx = 0, cy = 0, path = new THREE.Shape()) {
+  path.moveTo(cx - w / 2 + r, cy - h / 2);
+  path.lineTo(cx + w / 2 - r, cy - h / 2); path.quadraticCurveTo(cx + w / 2, cy - h / 2, cx + w / 2, cy - h / 2 + r);
+  path.lineTo(cx + w / 2, cy + h / 2 - r); path.quadraticCurveTo(cx + w / 2, cy + h / 2, cx + w / 2 - r, cy + h / 2);
+  path.lineTo(cx - w / 2 + r, cy + h / 2); path.quadraticCurveTo(cx - w / 2, cy + h / 2, cx - w / 2, cy + h / 2 - r);
+  path.lineTo(cx - w / 2, cy - h / 2 + r); path.quadraticCurveTo(cx - w / 2, cy - h / 2, cx - w / 2 + r, cy - h / 2);
+  return path;
+}
+function canvasTex(w, h, draw) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const tex = new THREE.CanvasTexture(c);
+  tex.encoding = THREE.sRGBEncoding;
+  tex.anisotropy = 8;
+  return tex;
+}
+const decalMat = () => new THREE.MeshBasicMaterial({ transparent: true, polygonOffset: true, polygonOffsetFactor: -4 });
+
+// ---------- mouths: the nine shapes (A-H, X) ----------
+function mouthTextures(style) {
+  const out = {};
+  const dark = { bus: '#4a1424', frog: '#3d1a24' }[style] || '#5a1828';
+  const line = { bus: '#26324a', kitty: '#7a3a4a', frog: '#1f4a1a' }[style] || '#1d1d1d';
+  const wide = style === 'frog' ? 1.35 : 1;
+  for (const s of 'ABCDEFGHX') {
+    out[s] = canvasTex(256, 192, (g, w, h) => {
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      const cx = w / 2, cy = h / 2;
+      const open = (rx, ry, teeth = false, tng = true, up = false) => {
+        rx *= wide;
+        g.fillStyle = dark;
+        g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); g.fill();
+        g.save(); g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); g.clip();
+        if (tng) { g.fillStyle = '#ff7d8f'; g.beginPath(); g.ellipse(cx, up ? cy - ry * 0.2 : cy + ry * 0.75, rx * 0.65, ry * 0.55, 0, 0, Math.PI * 2); g.fill(); }
+        if (teeth) { g.fillStyle = '#fff'; g.fillRect(cx - rx, cy - ry, rx * 2, ry * 0.42); }
+        g.restore();
+        g.strokeStyle = line; g.lineWidth = 7;
+        g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); g.stroke();
+      };
+      if (s === 'X') { g.strokeStyle = line; g.lineWidth = 11; g.beginPath(); g.moveTo(cx - 58 * wide, cy - 12); g.quadraticCurveTo(cx, cy + 38, cx + 58 * wide, cy - 12); g.stroke(); }
+      if (s === 'A') { g.strokeStyle = line; g.lineWidth = 12; g.beginPath(); g.moveTo(cx - 46 * wide, cy); g.quadraticCurveTo(cx, cy + 12, cx + 46 * wide, cy); g.stroke(); }
+      if (s === 'B') open(54, 22, true, false);
+      if (s === 'C') open(52, 38, true);
+      if (s === 'D') open(62, 58, true);
+      if (s === 'E') open(40, 46);
+      if (s === 'F') open(24, 26, false, false);
+      if (s === 'G') { open(50, 22, true, false); }
+      if (s === 'H') open(48, 40, true, true, true);
+    });
+  }
+  return out;
+}
+const OPEN = { X: 0, A: 0, B: 0.25, C: 0.55, D: 0.85, E: 0.6, F: 0.35, G: 0.25, H: 0.5 };
+function mouthAt(who, t) {
+  for (const [k, l] of Object.entries(T.lines)) {
+    if (l.who !== who) continue;
+    const f = Math.floor((t - l.start) * T.fps);
+    const s = VIS[k];
+    if (f >= 0 && f < s.length) return s[f];
+  }
+  return 'X';
+}
+
+// ---------- characters ----------
+// Every character: g (feet on the ground) > inner (bob and hop) > parts.
+function eye(parent, pos, r, iris, opts = {}) {
+  const e = group(parent, pos);
+  mesh(sphere(r), mat('#ffffff', { roughness: 0.3 }), e);
+  mesh(sphere(r * 0.74), mat(iris, { roughness: 0.25 }), e, [0, -r * 0.05, r * 0.45]);
+  mesh(sphere(r * 0.4), mat('#140a05', { roughness: 0.2 }), e, [0, -r * 0.05, r * 0.88]);
+  mesh(sphere(r * 0.22), mat('#ffffff', { emissive: '#ffffff', emissiveIntensity: 0.8 }), e, [-r * 0.25, r * 0.3, r * 1.08]);
+  if (opts.scale) { e.scale.set(...opts.scale); e.userData.sy = opts.scale[1]; }
+  return e;
+}
+function makePip() {
+  const g = group(), inner = group(g), body = group(inner, [0, 1.85, 0]);
+  const white = mat('#ffffff', { roughness: 0.75 }), black = mat('#1f1f22', { roughness: 0.7 });
+  const head = group(body);
+  mesh(sphere(0.55, 48), white, head);
+  for (const sx of [-1, 1]) {
+    mesh(sphere(0.2), black, head, [sx * 0.4, 0.42, -0.02]);
+    mesh(sphere(0.1), mat('#3a3a3e'), head, [sx * 0.4, 0.43, 0.12]);
+    const patch = mesh(sphere(0.2), black, head, [sx * 0.2, 0.03, 0.46], [0.9, 1.2, 0.45]);
+    patch.rotation.z = sx * 0.5;
+  }
+  const eyes = [-1, 1].map((sx) => eye(head, [sx * 0.2, 0.04, 0.53], 0.1, '#6b3e26'));
+  mesh(sphere(0.07), black, head, [0, -0.13, 0.53], [1.35, 0.9, 0.8]);
+  for (const sx of [-1, 1]) mesh(sphere(0.085), mat('#ff9db0', { transparent: true, opacity: 0.55 }), head, [sx * 0.33, -0.16, 0.42], [1, 0.75, 0.4]);
+  const mouth = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.225), decalMat());
+  mouth.position.set(0, -0.29, 0.5); mouth.rotation.x = -0.25; head.add(mouth);
+  const shirt = mat('#e8413b', { roughness: 0.8 });
+  mesh(sphere(0.45), shirt, body, [0, -0.78, 0], [1, 0.95, 0.85]);
+  mesh(sphere(0.4), mat('#2f6fd6', { roughness: 0.8 }), body, [0, -1.12, 0], [1, 0.7, 0.85]);
+  const belt = mesh(new THREE.BoxGeometry(0.12, 1.0, 0.04), mat('#37414f'), body, [0, -0.78, 0.39]);
+  belt.rotation.z = 0.75;
+  const arms = [-1, 1].map((sx) => {
+    const a = group(body, [sx * 0.38, -0.55, 0.05]);
+    mesh(new THREE.CapsuleGeometry(0.11, 0.36, 8, 16), black, a, [0, -0.28, 0]);
+    return a;
+  });
+  const legs = [-1, 1].map((sx) => {
+    const l = group(body, [sx * 0.2, -1.32, 0]);
+    mesh(new THREE.CapsuleGeometry(0.13, 0.22, 8, 16), black, l, [0, -0.2, 0]);
+    mesh(sphere(0.15), black, l, [0, -0.42, 0.06], [1, 0.6, 1.3]);
+    return l;
+  });
+  return { who: 'pip', g, inner, body, head, eyes, mouth, mouthStyle: 'pip', belt, armL: arms[0], armR: arms[1], legL: legs[0], legR: legs[1], headY: 1.85 };
+}
+function makeKitty() {
+  const g = group(), inner = group(g);
+  const fur = mat('#fbfbfb', { roughness: 0.85 }), pink = mat('#ffb3c7', { roughness: 0.6 });
+  mesh(sphere(0.42), fur, inner, [0, 0.5, 0], [1, 0.95, 0.9]);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) mesh(sphere(0.12), fur, inner, [sx * 0.2, 0.1, sz * 0.18 + 0.05], [1, 0.7, 1.2]);
+  const tailCurve = new THREE.CatmullRomCurve3([V(0, 0.4, -0.35), V(0.15, 0.6, -0.6), V(0.05, 0.95, -0.7), V(-0.1, 1.1, -0.55)]);
+  mesh(new THREE.TubeGeometry(tailCurve, 24, 0.07, 10), fur, inner);
+  const head = group(inner, [0, 1.12, 0.05]);
+  mesh(sphere(0.42, 40), fur, head, [0, 0, 0], [1.08, 0.95, 0.95]);
+  for (const sx of [-1, 1]) {
+    const ear = mesh(new THREE.ConeGeometry(0.15, 0.3, 16), fur, head, [sx * 0.26, 0.38, -0.02]);
+    ear.rotation.z = -sx * 0.35;
+    const earIn = mesh(new THREE.ConeGeometry(0.09, 0.2, 16), pink, head, [sx * 0.255, 0.36, 0.04]);
+    earIn.rotation.z = -sx * 0.35;
+  }
+  const eyes = [-1, 1].map((sx) => eye(head, [sx * 0.17, 0.04, 0.33], 0.11, '#3d8bfd', { scale: [1, 1.15, 1] }));
+  mesh(sphere(0.045), pink, head, [0, -0.08, 0.41], [1.3, 0.9, 0.8]);
+  for (const sx of [-1, 1]) {
+    mesh(sphere(0.07), mat('#ffb0c4', { transparent: true, opacity: 0.6 }), head, [sx * 0.27, -0.11, 0.3], [1, 0.75, 0.4]);
+    for (const k of [-1, 0, 1]) {
+      const w = mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.34, 6), mat('#9aa0a8'), head, [sx * 0.3, -0.1 + k * 0.035, 0.32]);
+      w.rotation.z = Math.PI / 2 + sx * k * 0.12;
+    }
+  }
+  const mouth = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.165), decalMat());
+  mouth.position.set(0, -0.2, 0.385); mouth.rotation.x = -0.2; head.add(mouth);
+  const bow = group(head, [0.22, 0.3, 0.12]);
+  bow.rotation.z = -0.35;
+  const bowM = mat('#ff5fa2', { roughness: 0.45 });
+  mesh(sphere(0.11), bowM, bow, [-0.11, 0, 0], [1, 0.75, 0.45]);
+  mesh(sphere(0.11), bowM, bow, [0.11, 0, 0], [1, 0.75, 0.45]);
+  mesh(sphere(0.055), mat('#e0408a'), bow);
+  return { who: 'kitty', g, inner, head, eyes, mouth, mouthStyle: 'kitty', headY: 1.12 };
+}
+function makeDucky() {
+  const g = group(), inner = group(g);
+  const yellow = mat('#ffd93b', { roughness: 0.7 }), orange = mat('#ff9f1c', { roughness: 0.45 });
+  mesh(sphere(0.5, 40), yellow, inner, [0, 0.5, 0], [1, 0.85, 1.05]);
+  mesh(sphere(0.18), yellow, inner, [0, 0.62, -0.5], [1, 0.6, 1]).rotation.x = 0.6;
+  for (const sx of [-1, 1]) mesh(sphere(0.16), orange, inner, [sx * 0.18, 0.04, 0.12], [1.1, 0.35, 1.5]);
+  const wings = [-1, 1].map((sx) => {
+    const w = group(inner, [sx * 0.46, 0.6, -0.02]);
+    mesh(sphere(0.22), yellow, w, [sx * 0.05, -0.08, 0], [0.45, 1, 0.9]);
+    return w;
+  });
+  const head = group(inner, [0, 1.08, 0.06]);
+  mesh(sphere(0.36, 40), yellow, head);
+  for (const k of [-1, 0, 1]) mesh(sphere(0.07), yellow, head, [k * 0.06, 0.36 + (k ? 0 : 0.03), -0.02 + Math.abs(k) * 0.02]);
+  const eyes = [-1, 1].map((sx) => eye(head, [sx * 0.14, 0.08, 0.28], 0.075, '#1c1c1c'));
+  for (const sx of [-1, 1]) mesh(sphere(0.06), mat('#ffa0a0', { transparent: true, opacity: 0.55 }), head, [sx * 0.22, -0.06, 0.25], [1, 0.75, 0.4]);
+  mesh(sphere(0.16), orange, head, [0, -0.05, 0.33], [1.15, 0.38, 0.95]);
+  const beakLow = group(head, [0, -0.1, 0.26]);
+  mesh(sphere(0.13), orange, beakLow, [0, -0.02, 0.06], [1.05, 0.3, 0.9]);
+  return { who: 'ducky', g, inner, head, eyes, beakLow, wings, headY: 1.08 };
+}
+function makeFroggy() {
+  const g = group(), inner = group(g);
+  const green = mat('#5cc94a', { roughness: 0.5 }), light = mat('#b6ec8a', { roughness: 0.6 });
+  mesh(sphere(0.55, 40), green, inner, [0, 0.42, 0], [1.15, 0.72, 1]);
+  mesh(sphere(0.4), light, inner, [0, 0.35, 0.22], [1, 0.7, 0.75]);
+  for (const sx of [-1, 1]) {
+    mesh(sphere(0.25), green, inner, [sx * 0.55, 0.2, -0.05], [0.8, 0.55, 1.3]);
+    mesh(sphere(0.12), green, inner, [sx * 0.3, 0.07, 0.42], [1.2, 0.45, 1.2]);
+  }
+  const pack = group(inner, [0, 0.55, -0.48]);
+  mesh(new THREE.ExtrudeGeometry(roundedShape(0.55, 0.5, 0.12), { depth: 0.18, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 4 }),
+    mat('#ffcf33', { roughness: 0.5 }), pack, [0, 0, -0.2]);
+  mesh(new THREE.BoxGeometry(0.4, 0.14, 0.04), mat('#f0a500'), pack, [0, -0.08, 0.02]);
+  for (const sx of [-1, 1]) mesh(new THREE.TorusGeometry(0.3, 0.025, 8, 24, Math.PI), mat('#f0a500'), inner, [sx * 0.28, 0.55, -0.1]).rotation.y = Math.PI / 2;
+  const head = group(inner, [0, 0.62, 0.05]);
+  const eyes = [-1, 1].map((sx) => {
+    mesh(sphere(0.22), green, head, [sx * 0.27, 0.22, 0.05]);
+    return eye(head, [sx * 0.27, 0.27, 0.16], 0.16, '#1c1c1c');
+  });
+  for (const sx of [-1, 1]) mesh(sphere(0.07), mat('#ff9db0', { transparent: true, opacity: 0.55 }), head, [sx * 0.42, -0.08, 0.36], [1, 0.75, 0.4]);
+  const mouth = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.24), decalMat());
+  mouth.position.set(0, -0.12, 0.47); mouth.rotation.x = -0.35; head.add(mouth);
+  return { who: 'froggy', g, inner, head, eyes, mouth, mouthStyle: 'frog', headY: 0.62 };
+}
+function makeBirdie() {
+  const g = group(), inner = group(g);
+  const blue = mat('#6ec6ff', { roughness: 0.6 }), orange = mat('#ff9f1c', { roughness: 0.45 }), white = mat('#e8f6ff', { roughness: 0.7 });
+  mesh(sphere(0.3, 32), blue, inner, [0, 0.36, 0], [1, 0.95, 1.05]);
+  mesh(sphere(0.2), white, inner, [0, 0.32, 0.14], [1, 1, 0.8]);
+  for (const k of [-1, 0, 1]) mesh(sphere(0.1), blue, inner, [k * 0.07, 0.36, -0.36], [0.5, 0.25, 1.2]).rotation.y = k * 0.3;
+  for (const sx of [-1, 1]) mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.12, 6), orange, inner, [sx * 0.08, 0.06, 0.02]);
+  const wings = [-1, 1].map((sx) => {
+    const w = group(inner, [sx * 0.28, 0.42, 0]);
+    mesh(sphere(0.15), blue, w, [sx * 0.04, -0.06, 0], [0.4, 1, 0.9]);
+    return w;
+  });
+  const head = group(inner, [0, 0.72, 0.04]);
+  mesh(sphere(0.23, 32), blue, head);
+  mesh(sphere(0.05), blue, head, [0, 0.23, 0]);
+  const eyes = [-1, 1].map((sx) => eye(head, [sx * 0.1, 0.05, 0.18], 0.055, '#1c1c1c'));
+  for (const sx of [-1, 1]) mesh(sphere(0.04), mat('#ffa0b4', { transparent: true, opacity: 0.6 }), head, [sx * 0.14, -0.05, 0.17], [1, 0.75, 0.4]);
+  const up = mesh(new THREE.ConeGeometry(0.06, 0.16, 16), orange, head, [0, -0.01, 0.27]);
+  up.rotation.x = Math.PI / 2;
+  const beakLow = group(head, [0, -0.04, 0.21]);
+  const lo = mesh(new THREE.ConeGeometry(0.045, 0.12, 16), orange, beakLow, [0, -0.01, 0.05]);
+  lo.rotation.x = Math.PI / 2;
+  return { who: 'birdie', g, inner, head, eyes, beakLow, wings, headY: 0.72 };
+}
+
+// ---------- Sunny the bus, with real windows ----------
+function makeBus() {
+  const g = group(), bob = group(g);
+  const yellow = mat('#ffc928', { roughness: 0.38 }), trim = mat('#f0a500', { roughness: 0.45 });
+  const L = 7.6, H = 2.85, D = 2.5, bev = 0.25, base = 0.75;
+  const winX = [-2.5, -0.85, 0.8], winY = 2.85;
+  const shape = roundedShape(L, H, 0.6);
+  for (const x of winX) shape.holes.push(roundedShape(1.25, 1.15, 0.22, x, winY - base - H / 2, new THREE.Path()));
+  const bodyGeo = new THREE.ExtrudeGeometry(shape, { depth: D, bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelSegments: 8, curveSegments: 16 });
+  bodyGeo.translate(0, base + H / 2, -D / 2);
+  mesh(bodyGeo, yellow, bob);
+  const side = D / 2 + bev;
+  // Inside: blue seats behind each window, a floor.
+  mesh(new THREE.BoxGeometry(L - 0.4, 2.6, 0.2), mat('#7fa6d0', { roughness: 0.9 }), bob, [0, 2.2, -0.65]);
+  for (const x of winX) mesh(new THREE.BoxGeometry(1.3, 0.9, 0.5), mat('#3f7fd0', { roughness: 0.8 }), bob, [x, 1.95, -0.3]);
+  mesh(new THREE.BoxGeometry(L - 0.4, 0.1, D), mat('#566070'), bob, [0, 1.5, 0]);
+  const glassM = new THREE.MeshStandardMaterial({ color: '#cfeeff', transparent: true, opacity: 0.3, roughness: 0.05, depthWrite: false, emissive: '#bfe6ff', emissiveIntensity: 0.15 });
+  for (const x of winX) for (const sz of [-1, 1]) {
+    const gl = mesh(new THREE.ShapeGeometry(roundedShape(1.3, 1.2, 0.24)), glassM, bob, [x, winY, sz * (side - 0.02)]);
+    gl.castShadow = false;
+  }
+  mesh(new THREE.BoxGeometry(L - 0.6, 0.12, D + 0.3), mat('#ffe27a', { roughness: 0.3 }), bob, [0, base + H + 0.2, 0]);
+  mesh(new THREE.BoxGeometry(L + 0.3, 0.18, D + 0.56), mat('#ff8a2a', { roughness: 0.5 }), bob, [0, 1.95, 0]);
+  ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa'].forEach((c, i) =>
+    mesh(new THREE.TorusGeometry(0.78 - i * 0.11, 0.05, 12, 48, Math.PI), mat(c, { roughness: 0.4 }), bob, [-0.9, 0.98, side + 0.02], [1, 1, 0.35]));
+  const front = L / 2 + bev;
+  const ws = mesh(new THREE.ShapeGeometry(roundedShape(2.2, 1.3, 0.35)), mat('#e9f8ff', { roughness: 0.15 }), bob, [front + 0.005, 2.85, 0]);
+  ws.rotation.y = Math.PI / 2;
+  const eyes = [-1, 1].map((sz) => {
+    const e = group(bob, [front + 0.02, 2.9, sz * 0.55]); e.rotation.y = Math.PI / 2;
+    mesh(sphere(0.46), mat('#ffffff', { roughness: 0.25 }), e, [0, 0, 0], [1, 1.12, 0.32]);
+    const iris = group(e, [0, 0, 0.1]);
+    mesh(sphere(0.27), mat('#2f7de1', { roughness: 0.2 }), iris, [0, 0, 0.02], [1, 1, 0.35]);
+    mesh(sphere(0.13), mat('#0d1b33', { roughness: 0.2 }), iris, [0, 0, 0.08], [1, 1, 0.35]);
+    mesh(sphere(0.06), mat('#ffffff', { emissive: '#ffffff', emissiveIntensity: 1 }), iris, [-0.09, 0.1, 0.14]);
+    const brow = mesh(new THREE.CapsuleGeometry(0.06, 0.5, 6, 12), mat('#26324a'), e, [0, 0.66, 0]);
+    brow.rotation.z = Math.PI / 2 + sz * 0.12;
+    return { e, iris };
+  });
+  const mouth = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.975), decalMat());
+  mouth.position.set(front + 0.03, 1.45, 0); mouth.rotation.y = Math.PI / 2; bob.add(mouth);
+  for (const sz of [-1, 1]) mesh(sphere(0.2), mat('#fff8d0', { emissive: '#fff2a0', emissiveIntensity: 0.9 }), bob, [front, 1.45, sz * 1.05], [0.5, 1, 1]);
+  for (const sx of [-1, 1]) mesh(new THREE.CapsuleGeometry(0.16, D + 0.2, 8, 16), mat('#9aa5b1', { roughness: 0.35, metalness: 0.3 }), bob, [sx * (front + 0.12), 0.9, 0]).rotation.x = Math.PI / 2;
+  const tyre = mat('#2b2f38', { roughness: 0.85 }), hubM = mat('#dfe5ee', { roughness: 0.3, metalness: 0.2 });
+  const wheels = [];
+  for (const x of [-2.45, 2.45]) for (const sz of [-1, 1]) {
+    const w = group(g, [x, 0.66, sz * 1.42]);
+    const tg = new THREE.CylinderGeometry(0.66, 0.66, 0.5, 40); tg.rotateX(Math.PI / 2);
+    mesh(tg, tyre, w);
+    const spin = group(w);
+    const hg = new THREE.CylinderGeometry(0.32, 0.32, 0.54, 32); hg.rotateX(Math.PI / 2);
+    mesh(hg, hubM, spin);
+    for (let i = 0; i < 5; i++) mesh(sphere(0.055, 12), mat('#8f99a8'), spin, [Math.cos(i * 1.2566) * 0.19, Math.sin(i * 1.2566) * 0.19, sz * 0.28]);
+    wheels.push(spin);
+  }
+  // Seats: one per window, nearest the front first.
+  const slots = [0.8, -0.85, -2.5].map((x) => group(bob, [x, 1.55, 0.25]));
+  return { who: 'sunny', g, bob, eyes, mouth, wheels, slots };
+}
+
+// ---------- scenery ----------
+function flower(parent, x, z, size, color, o = {}) {
+  const g = group(parent, [x, o.y || 0, z]);
+  const head = group(g, [0, size * 3.2, 0]);
+  mesh(new THREE.CylinderGeometry(size * 0.12, size * 0.14, size * 3.2, 8), mat('#3e9b35'), g, [0, size * 1.6, 0]);
+  const pm = mat(color, { roughness: 0.6 });
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    mesh(sphere(size * 0.55, 16), pm, head, [Math.cos(a) * size * 0.75, Math.sin(a) * size * 0.75, 0], [1, 0.8, 0.35]);
+  }
+  mesh(sphere(size * 0.5, 20), mat(o.center || '#ffd43b', { roughness: 0.5 }), head, [0, 0, size * 0.12], [1, 1, 0.5]);
+  if (o.face) {
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(size * 0.95, size * 0.95), new THREE.MeshBasicMaterial({ map: R.faceTex, transparent: true, polygonOffset: true, polygonOffsetFactor: -4 }));
+    f.position.z = size * 0.37; head.add(f);
+  }
+  for (const s of [-1, 1]) mesh(sphere(size * 0.4, 12), mat('#4cb043'), g, [s * size * 0.45, size * 1.3, 0], [1.4, 0.45, 0.6]).rotation.z = s * 0.5;
+  return { g, head };
+}
+function tree(parent, x, z, s, o = {}) {
+  const g = group(parent, [x, 0, z]); g.scale.setScalar(s);
+  mesh(new THREE.CylinderGeometry(0.25, 0.35, 2.2, 10), mat('#9a6a3a', { roughness: 0.9 }), g, [0, 1.1, 0]);
+  const leaves = mat(o.color || '#56b84c', { roughness: 0.8 });
+  [[0, 3.0, 0, 1.3], [-0.9, 2.5, 0.2, 1.0], [0.9, 2.5, -0.1, 1.0], [0.2, 2.3, 0.8, 0.9]].forEach(([a, b, c, r]) => mesh(sphere(r, 20), leaves, g, [a, b, c]));
+  return g;
+}
+function pine(parent, x, z, s) {
+  const g = group(parent, [x, 0, z]); g.scale.setScalar(s);
+  mesh(new THREE.CylinderGeometry(0.2, 0.28, 1.2, 8), mat('#8a5a30'), g, [0, 0.6, 0]);
+  [[1.6, 1.4, 1.6], [1.25, 1.2, 2.5], [0.85, 1.0, 3.3]].forEach(([r, h, y]) => mesh(new THREE.ConeGeometry(r, h, 18), mat('#3f9c46', { roughness: 0.8 }), g, [0, y, 0]));
+  return g;
+}
+function cloud(parent, x, y, z, s) {
+  const g = group(parent, [x, y, z]); g.scale.setScalar(s);
+  const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1, emissive: '#dfefff', emissiveIntensity: 0.35 });
+  [[0, 0, 0, 1.6], [1.6, 0.4, 0, 1.9], [3.2, 0, 0, 1.5], [1.6, -0.5, 0.5, 1.4], [-1.3, -0.3, 0, 1.1], [4.4, -0.3, 0, 1.0]]
+    .forEach(([a, b, c, r]) => { mesh(sphere(r, 20), m, g, [a, b, c]).castShadow = false; });
+  return g;
+}
+function butterfly(parent, color, scale = 1) {
+  const g = group(parent);
+  g.scale.setScalar(scale);
+  const wm = new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide, roughness: 0.6, emissive: color, emissiveIntensity: 0.15 });
+  const wings = [-1, 1].map((s) => {
+    const w = group(g);
+    const a = new THREE.Mesh(new THREE.CircleGeometry(0.28, 20), wm); a.position.set(s * 0.26, 0.1, 0); a.scale.set(1, 0.8, 1); w.add(a);
+    const b = new THREE.Mesh(new THREE.CircleGeometry(0.18, 20), wm); b.position.set(s * 0.2, -0.18, 0); w.add(b);
+    return w;
+  });
+  mesh(new THREE.CapsuleGeometry(0.04, 0.3, 6, 10), mat('#3b2a4a'), g);
+  return { g, wings };
+}
+function leafGeo(len) {
+  const s = new THREE.Shape();
+  s.moveTo(0, 0);
+  s.quadraticCurveTo(len * 0.42, len * 0.32, 0, len);
+  s.quadraticCurveTo(-len * 0.42, len * 0.32, 0, 0);
+  const geo = new THREE.ExtrudeGeometry(s, { depth: 0.02, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2, curveSegments: 20 });
+  geo.translate(0, -len / 2, 0);
+  return geo;
+}
+function leaf(parent, len, color = '#4cb043') {
+  const g = group(parent);
+  mesh(leafGeo(len), mat(color, { roughness: 0.55 }), g);
+  mesh(new THREE.CylinderGeometry(len * 0.012, len * 0.012, len * 0.95, 6), mat('#2f7d2a'), g, [0, 0, 0.05]);
+  return g;
+}
+function lilyPad(parent, x, z, r, y = 0.04) {
+  const m = mesh(new THREE.CylinderGeometry(r, r, 0.05, 32, 1, false, 0.3, Math.PI * 2 - 0.6), mat('#4caf50', { roughness: 0.5 }), parent, [x, y, z]);
+  return m;
+}
+function sunSprite() {
+  const tex = canvasTex(512, 512, (c) => {
+    const grd = c.createRadialGradient(256, 256, 60, 256, 256, 256);
+    grd.addColorStop(0, 'rgba(255,240,150,1)'); grd.addColorStop(0.45, 'rgba(255,225,90,.45)'); grd.addColorStop(1, 'rgba(255,225,90,0)');
+    c.fillStyle = grd; c.fillRect(0, 0, 512, 512);
+    c.fillStyle = '#ffd23b';
+    for (let i = 0; i < 12; i++) { c.save(); c.translate(256, 256); c.rotate(i * Math.PI / 6); c.beginPath(); c.roundRect(-10, -175, 20, 48, 10); c.fill(); c.restore(); }
+    c.fillStyle = '#ffd93b'; c.strokeStyle = '#ffc21a'; c.lineWidth = 8;
+    c.beginPath(); c.arc(256, 256, 110, 0, 7); c.fill(); c.stroke();
+    c.strokeStyle = '#b86e00'; c.lineWidth = 9; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(208, 242); c.quadraticCurveTo(222, 224, 236, 242); c.stroke();
+    c.beginPath(); c.moveTo(276, 242); c.quadraticCurveTo(290, 224, 304, 242); c.stroke();
+    c.beginPath(); c.moveTo(222, 284); c.quadraticCurveTo(256, 316, 290, 284); c.stroke();
+    c.fillStyle = 'rgba(255,150,90,.6)'; c.beginPath(); c.arc(192, 280, 16, 0, 7); c.fill(); c.beginPath(); c.arc(320, 280, 16, 0, 7); c.fill();
+  });
+  R.sunTex = tex;
+  return new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, fog: false }));
+}
+function ground(parent, c1, c2, hills = true) {
+  const geo = new THREE.PlaneGeometry(500, 300, 250, 150);
+  geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position, cols = [];
+  const a = new THREE.Color(c1), b = new THREE.Color(c2), tmp = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    let y = 0;
+    if (hills && z < -10) y = Math.pow((-10 - z) / 30, 1.4) * (2.2 + 1.6 * Math.sin(x * 0.06) + 1.2 * Math.sin(x * 0.13 + 1));
+    pos.setY(i, y);
+    tmp.copy(a).lerp(b, 0.5 + 0.5 * Math.sin(x * 0.21 + z * 0.17) * Math.sin(z * 0.11));
+    cols.push(tmp.r, tmp.g, tmp.b);
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+  m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+function scatterFlowers(parent, seed, n, x0, x1, zs, colors) {
+  const r = rng(seed), list = [];
+  for (let i = 0; i < n; i++) {
+    const [za, zb] = zs[Math.floor(r() * zs.length)];
+    list.push(flower(parent, x0 + r() * (x1 - x0), za + r() * (zb - za), 0.12 + r() * 0.08, colors[Math.floor(r() * colors.length)]));
+  }
+  return list;
+}
+function glowRing(parent, pos, r) {
+  const m = new THREE.Mesh(new THREE.TorusGeometry(r, 0.07, 12, 48), new THREE.MeshBasicMaterial({ color: '#fff27a', transparent: true, opacity: 0 }));
+  m.rotation.x = Math.PI / 2; m.position.set(...pos); parent.add(m);
+  return m;
+}
+function balloon(parent, color, r = 0.5) {
+  const g = group(parent);
+  mesh(sphere(r, 32), mat(color, { roughness: 0.25, emissive: color, emissiveIntensity: 0.12 }), g, [0, 0, 0], [1, 1.15, 1]);
+  mesh(new THREE.ConeGeometry(r * 0.12, r * 0.2, 12), mat(color), g, [0, -r * 1.2, 0]).rotation.x = Math.PI;
+  mesh(sphere(r * 0.18, 12), mat('#ffffff', { emissive: '#ffffff', emissiveIntensity: 0.5, transparent: true, opacity: 0.7 }), g, [-r * 0.35, r * 0.45, r * 0.75], [1, 1.4, 0.4]);
+  mesh(new THREE.CylinderGeometry(0.008, 0.008, 1.6, 6), mat('#e8e8e8'), g, [0, -r * 1.2 - 0.8, 0]);
+  return g;
+}
+function toyCar(parent, color) {
+  const g = group(parent);
+  mesh(new THREE.ExtrudeGeometry(roundedShape(1.0, 0.36, 0.15), { depth: 0.5, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.06, bevelSegments: 4 }), mat(color, { roughness: 0.3 }), g, [0, 0.38, -0.25]);
+  mesh(new THREE.ExtrudeGeometry(roundedShape(0.55, 0.3, 0.12), { depth: 0.42, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 4 }), mat(color, { roughness: 0.3 }), g, [-0.05, 0.68, -0.21]);
+  mesh(new THREE.BoxGeometry(0.4, 0.2, 0.56), mat('#dff4ff', { roughness: 0.1 }), g, [-0.05, 0.7, 0]);
+  for (const x of [-0.3, 0.3]) for (const z of [-0.3, 0.3]) {
+    const w = new THREE.CylinderGeometry(0.15, 0.15, 0.1, 20); w.rotateX(Math.PI / 2);
+    mesh(w, mat('#2b2f38'), g, [x, 0.16, z]);
+  }
+  return g;
+}
+function starMesh(parent, color, r = 0.55) {
+  const s = new THREE.Shape();
+  for (let i = 0; i < 10; i++) {
+    const a = Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.48 : r;
+    i ? s.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : s.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+  }
+  const geo = new THREE.ExtrudeGeometry(s, { depth: 0.14, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.08, bevelSegments: 5 });
+  geo.translate(0, 0, -0.07);
+  const g = group(parent);
+  mesh(geo, mat(color, { roughness: 0.3, emissive: color, emissiveIntensity: 0.1 }), g);
+  return g;
+}
+function apple(parent, r = 0.5) {
+  const g = group(parent);
+  mesh(sphere(r, 40), mat('#e53935', { roughness: 0.3 }), g, [0, 0, 0], [1.05, 0.95, 1.05]);
+  mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.25, 8), mat('#6b4423'), g, [0, r * 0.95, 0]);
+  const l = leaf(g, 0.35, '#5cb85c'); l.position.set(0.12, r * 1.02, 0); l.rotation.set(0.3, 0, -1.1);
+  return g;
+}
+function ball(parent, color, r = 0.45) {
+  const g = group(parent);
+  mesh(sphere(r, 40), mat(color, { roughness: 0.35 }), g);
+  mesh(new THREE.TorusGeometry(r * 1.0, r * 0.06, 10, 48), mat('#ffffff', { roughness: 0.4 }), g).rotation.y = Math.PI / 2;
+  return g;
+}
+
+// ---------- worlds ----------
+function buildWorlds() {
+  const W = {};
+  R.faceTex = canvasTex(128, 128, (c) => {
+    c.fillStyle = '#4a2b12';
+    c.beginPath(); c.arc(46, 54, 8, 0, 7); c.fill(); c.beginPath(); c.arc(82, 54, 8, 0, 7); c.fill();
+    c.strokeStyle = '#4a2b12'; c.lineWidth = 7; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(44, 76); c.quadraticCurveTo(64, 96, 84, 76); c.stroke();
+    c.fillStyle = 'rgba(255,140,160,.75)'; c.beginPath(); c.arc(30, 76, 9, 0, 7); c.fill(); c.beginPath(); c.arc(98, 76, 9, 0, 7); c.fill();
+  });
+  const mixed = ['#ff6b9a', '#ffd43b', '#b07cff', '#ffffff', '#ff8a3d', '#5ec8ff'];
+
+  // Rainbow Valley: road, trees, flowers.
+  W.valley = group(scene);
+  ground(W.valley, '#7fd35f', '#5dbd41');
+  mesh(new THREE.PlaneGeometry(400, 4.6), mat('#efd7a0', { roughness: 1 }), W.valley, [0, 0.02, 0]).rotation.x = -Math.PI / 2;
+  const r1 = rng(4);
+  for (let i = 0; i < 26; i++) tree(W.valley, -70 + r1() * 140, -12 - r1() * 30, 0.8 + r1() * 0.6);
+  R.valleyFlowers = scatterFlowers(W.valley, 4, 90, -40, 40, [[6.5, 11], [-2.8, -8.8]], mixed);
+
+  // The red garden (scenes 3, 4, 6).
+  W.garden = group(W.valley);
+  mesh(sphere(1, 32), mat('#3f9a2c', { roughness: 0.9 }), W.garden, [-4.6, 0, 3.4], [3.2, 0.7, 1.8]);
+  const r2 = rng(9);
+  for (let i = 0; i < 22; i++) flower(W.garden, -7.2 + r2() * 5.2, 2.4 + r2() * 2.4, 0.13 + r2() * 0.05, '#e53935');
+  R.bigFlowers = [[-6.1, 3.9, 0.42], [-4.6, 3.4, 0.5], [-3.1, 3.9, 0.42]].map(([x, z, s]) => flower(W.garden, x, z, s, '#e53935', { face: true }));
+
+  // Red, blue, yellow (scene 5).
+  W.rby = group(W.valley);
+  R.rby = [['#e53935', -2.6], ['#1e88e5', 0], ['#ffd43b', 2.6]].map(([c, x]) => flower(W.rby, x, 3.2, 0.5, c, { face: true, center: c === '#ffd43b' ? '#ff9f1c' : '#ffd43b' }));
+  R.rbyRing = glowRing(W.rby, [-2.6, 0.08, 3.2], 1.0);
+
+  // The rainbow road (scenes 2, 22).
+  W.road = group(scene);
+  ground(W.road, '#86d566', '#5fbf43');
+  ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#3949ab', '#8e24aa'].forEach((c, i) =>
+    mesh(new THREE.PlaneGeometry(400, 0.72), mat(c, { roughness: 0.7 }), W.road, [0, 0.03, -2.5 + i * 0.72 + 0.36]).rotation.x = -Math.PI / 2);
+  R.scroll = group(W.road);
+  for (let i = 0; i < 64; i++) mesh(new THREE.BoxGeometry(1.1, 0.02, 0.12), mat('#ffffff', { roughness: 0.6 }), R.scroll, [-40 + i * 2.2, 0.05, 0]).castShadow = false;
+  for (let i = 0; i < 125; i++) {
+    const k = i % 44;
+    flower(R.scroll, -40 + i * 1.15 + (k * 0.37 % 0.4), 3.4 + (k * 0.61 % 1.6), 0.13 + (k * 0.013 % 0.06), mixed[k % mixed.length]);
+    flower(R.scroll, -40 + i * 1.15 + (k * 0.53 % 0.4), -3.4 - (k * 0.83 % 1.6), 0.13 + (k * 0.017 % 0.06), mixed[(k + 3) % mixed.length]);
+  }
+  R.scrollTrees = group(W.road);
+  for (let i = 0; i < 32; i++) tree(R.scrollTrees, -50 + i * 4.4, -9 - (i % 12) * 0.7, 0.8 + (i % 12) * 0.033);
+
+  // The yellow pond (scenes 7-10).
+  W.pond = group(scene);
+  ground(W.pond, '#8edb6a', '#6cc84d');
+  const water = mesh(new THREE.CircleGeometry(4.2, 64), mat('#4fb3f5', { roughness: 0.12, metalness: 0.1, emissive: '#2a86c9', emissiveIntensity: 0.15 }), W.pond, [-1, 0.05, -2.2], [1.5, 1, 1]);
+  water.rotation.x = -Math.PI / 2; water.castShadow = false;
+  mesh(new THREE.TorusGeometry(4.25, 0.25, 12, 64), mat('#d9c08a', { roughness: 1 }), W.pond, [-1, 0.05, -2.2], [1.5, 1, 1]).rotation.x = Math.PI / 2;
+  R.ripples = [0, 1, 2].map((i) => {
+    const m = new THREE.Mesh(new THREE.TorusGeometry(1, 0.025, 8, 48), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.5 }));
+    m.rotation.x = Math.PI / 2; m.position.set(-2 + i * 1.6, 0.07, -2.5 + i * 0.5); W.pond.add(m); return m;
+  });
+  [[-4, -1.4, 0.55], [1.8, -3.2, 0.5], [-0.6, -4.4, 0.45]].forEach(([x, z, r]) => lilyPad(W.pond, x, z, r, 0.07));
+  const r3 = rng(17);
+  R.pondFlowers = [];
+  for (let i = 0; i < 40; i++) {
+    const a = (i / 40) * Math.PI * 2 + r3() * 0.1, rr = 4.9 + r3() * 1.2;
+    if (Math.sin(a) > 0.5 && Math.abs(Math.cos(a)) < 0.7) continue;
+    R.pondFlowers.push(flower(W.pond, -1 + Math.cos(a) * rr * 1.5, -2.2 + Math.sin(a) * rr, 0.16 + r3() * 0.08, '#ffd43b', { center: '#ff9f1c' }));
+  }
+  for (let i = 0; i < 9; i++) {
+    const x = -8 + i * 2.1 + r3(), z = -7.2 - r3() * 1.5;
+    for (let k = 0; k < 3; k++) mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.2 + r3() * 0.6, 6), mat('#4a9a3a'), W.pond, [x + k * 0.12, 0.6, z]).rotation.z = (k - 1) * 0.12;
+  }
+  for (let i = 0; i < 18; i++) tree(W.pond, -60 + r3() * 120, -14 - r3() * 26, 0.8 + r3() * 0.5);
+  scatterFlowers(W.pond, 21, 40, -30, 30, [[5, 10]], mixed);
+  R.pondGame = group(W.pond, [0, 0, 0]);
+  R.game9 = [ball(R.pondGame, '#e53935'), starMesh(R.pondGame, '#ffd43b'), toyCar(R.pondGame, '#1e88e5')];
+  [-2.6, 0, 2.6].forEach((x, i) => R.game9[i].position.set(x, i === 1 ? 0.75 : i === 0 ? 0.45 : 0, 3.6));
+  R.ring9 = glowRing(R.pondGame, [0, 0.08, 3.6], 0.9);
+
+  // The green forest (scenes 11-14).
+  W.forest = group(scene);
+  ground(W.forest, '#5cbf45', '#3f9e33');
+  mesh(new THREE.PlaneGeometry(400, 4.6), mat('#d8c28f', { roughness: 1 }), W.forest, [0, 0.02, 0]).rotation.x = -Math.PI / 2;
+  const stream = mesh(new THREE.PlaneGeometry(400, 1.6), mat('#56b9f2', { roughness: 0.15, emissive: '#2a86c9', emissiveIntensity: 0.12 }), W.forest, [0, 0.04, -3.4]);
+  stream.rotation.x = -Math.PI / 2;
+  const r4 = rng(29);
+  for (let i = 0; i < 70; i++) {
+    const x = -60 + r4() * 120, z = r4() < 0.7 ? -4 - r4() * 22 : 10 + r4() * 8;
+    (r4() < 0.4 ? pine : tree)(W.forest, x, z, 0.9 + r4() * 0.7, { color: ['#4caf50', '#3e9e43', '#66bb3a'][i % 3] });
+  }
+  for (let i = 0; i < 60; i++) mesh(sphere(0.5 + r4() * 0.5, 16), mat(['#4caf50', '#5ec24d', '#3f9c46'][i % 3], { roughness: 0.9 }), W.forest,
+    [-40 + r4() * 80, 0.1, r4() < 0.6 ? -3 - r4() * 3 : 9.2 + r4() * 3], [1.3, 0.6, 1]);
+  R.froggyLeaf = leaf(W.forest, 2.6, '#57c24a');
+  R.froggyLeaf.rotation.set(-Math.PI / 2, 0, 0.4); R.froggyLeaf.position.set(0.3, 0.06, 4.3);
+  lilyPad(W.forest, -3.2, -3.3, 0.6, 0.07);
+  R.forestGame = group(W.forest);
+  const gl = leaf(R.forestGame, 1.1, '#43a047'); gl.rotation.set(-0.3, 0, 0.2);
+  R.game13 = [gl, apple(R.forestGame), ball(R.forestGame, '#ffd43b')];
+  [-2.6, 0, 2.6].forEach((x, i) => R.game13[i].position.set(x, i === 0 ? 0.7 : 0.48, 3.6));
+  R.ring13 = glowRing(R.forestGame, [-2.6, 0.08, 3.6], 0.9);
+  R.fallLeaves = [0, 1, 2, 3, 4].map((i) => leaf(W.forest, 0.7, ['#43a047', '#5cb85c', '#66bb3a', '#4caf50', '#7cc63a'][i]));
+
+  // The blue-sky meadow (scenes 15-21, 24).
+  W.meadow = group(scene);
+  ground(W.meadow, '#9be37a', '#76d05a');
+  R.meadowFlowers = scatterFlowers(W.meadow, 33, 110, -40, 40, [[3, 12], [-3, -12]], mixed);
+  const r5 = rng(41);
+  for (let i = 0; i < 14; i++) tree(W.meadow, -70 + r5() * 140, -22 - r5() * 20, 0.8 + r5() * 0.5);
+  // Birdie's tree, with a low branch.
+  R.birdTree = group(W.meadow, [-1.0, 0, -0.5]);
+  mesh(new THREE.CylinderGeometry(0.35, 0.5, 4.2, 12), mat('#9a6a3a', { roughness: 0.9 }), R.birdTree, [0, 2.1, 0]);
+  const branch = mesh(new THREE.CylinderGeometry(0.09, 0.15, 3.2, 10), mat('#9a6a3a', { roughness: 0.9 }), R.birdTree, [1.6, 2.6, 0.4]);
+  branch.rotation.z = -1.4;
+  [[0, 5.0, 0, 1.9], [-1.4, 4.3, 0.2, 1.4], [1.4, 4.4, -0.2, 1.5], [0.4, 4.0, 1.0, 1.2]].forEach(([a, b, c, r]) => mesh(sphere(r, 24), mat('#56b84c', { roughness: 0.8 }), R.birdTree, [a, b, c]));
+  R.meadowGame = group(W.meadow);
+  const bf = butterfly(R.meadowGame, '#1e88e5', 2.2);
+  R.game17 = [toyCar(R.meadowGame, '#e53935'), ball(R.meadowGame, '#43a047'), bf.g];
+  R.game17Wings = bf.wings;
+  [-2.6, 0, 2.6].forEach((x, i) => R.game17[i].position.set(x, i === 1 ? 0.48 : i === 2 ? 0.75 : 0, 3.6));
+  R.ring17 = glowRing(R.meadowGame, [2.6, 0.08, 3.6], 0.9);
+  R.balloons = ['#e53935', '#ffd43b', '#43a047', '#1e88e5'].map((c) => balloon(W.meadow, c));
+  // The friendship tree (scene 21).
+  R.friendTree = group(W.meadow, [0, 0, -2.5]);
+  mesh(new THREE.CylinderGeometry(0.6, 0.85, 5, 14), mat('#9a6a3a', { roughness: 0.9 }), R.friendTree, [0, 2.5, 0]);
+  [[0, 6.2, 0, 2.6], [-2.2, 5.3, 0.3, 2.0], [2.2, 5.4, -0.2, 2.1], [0.5, 5.0, 1.4, 1.8], [-1.2, 6.6, -0.6, 1.8]].forEach(([a, b, c, r]) =>
+    mesh(sphere(r, 28), mat('#4fb548', { roughness: 0.8 }), R.friendTree, [a, b, c]));
+  const r6 = rng(57);
+  for (let i = 0; i < 40; i++) {
+    const a = r6() * Math.PI * 2, y = 4.4 + r6() * 3.2, rr = 2.4 + r6() * 0.6;
+    mesh(sphere(0.18, 16), mat(['#e53935', '#ffd43b', '#1e88e5', '#ff6b9a', '#b07cff', '#ff8a3d'][i % 6], { roughness: 0.3, emissive: '#ffffff', emissiveIntensity: 0.05 }),
+      R.friendTree, [Math.cos(a) * rr, y, Math.sin(a) * rr * 0.8 + 0.6]);
+  }
+  for (let i = 0; i < 26; i++) flower(R.friendTree, Math.cos(i / 26 * 6.28) * (2.6 + (i % 3) * 0.4), Math.sin(i / 26 * 6.28) * 1.6 + 1.2, 0.18, mixed[i % mixed.length]);
+
+  // Recap studio (scene 23): a coloured backdrop and one object at a time.
+  W.recap = group(scene);
+  R.backdrop = mesh(new THREE.PlaneGeometry(60, 34), new THREE.MeshBasicMaterial({ color: '#ffffff', fog: false }), W.recap, [0, 1.5, -8]);
+  R.recapObjs = [apple(W.recap, 1.1), (() => { const g = group(W.recap); const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: R.sunTex, fog: false })); s.scale.set(5, 5, 1); g.add(s); return g; })(),
+    leaf(W.recap, 2.6, '#43a047'), group(W.recap)];
+  R.recapClouds = [cloud(R.recapObjs[3], -3, 0.6, -2, 0.6), cloud(R.recapObjs[3], 1.5, -0.6, -1, 0.7)];
+  R.recapObjs.forEach((o) => o.position.set(0, 1.5, 0));
+
+  // Sky rainbow (title and goodbye).
+  R.skyRainbow = group(scene);
+  ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa'].forEach((c, i) =>
+    mesh(new THREE.TorusGeometry(9 - i * 0.62, 0.32, 20, 96, Math.PI), mat(c, { roughness: 0.4, emissive: c, emissiveIntensity: 0.18 }), R.skyRainbow).castShadow = false);
+  R.titleClouds = [cloud(R.skyRainbow, -10.5, 0.4, 1.5, 1.4), cloud(R.skyRainbow, 6.2, 0.4, 1.5, 1.4)];
+  return W;
+}
+
+function init(timeline, visemes) {
+  T = timeline; VIS = visemes;
+  T.scenes.forEach((s) => { SC[s.id] = s; });
+  renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, preserveDrawingBuffer: true });
+  renderer.setSize(1920, 1080, false);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.NoToneMapping;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  scene = new THREE.Scene();
+  R.sky = canvasTex(4, 512, (c) => {
+    const g = c.createLinearGradient(0, 0, 0, 512);
+    g.addColorStop(0, '#4fb2fb'); g.addColorStop(0.55, '#9fdcff'); g.addColorStop(1, '#e4f7ff');
+    c.fillStyle = g; c.fillRect(0, 0, 4, 512);
+  });
+  scene.background = R.sky;
+  scene.fog = new THREE.Fog('#cbeeff', 70, 260);
+  cam = new THREE.PerspectiveCamera(38, 1920 / 1080, 0.1, 600);
+  scene.add(new THREE.HemisphereLight('#dff4ff', '#6fa85a', 0.95));
+  const sun = new THREE.DirectionalLight('#fff6e0', 1.75);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 12, bottom: -8, near: 1, far: 80 });
+  sun.shadow.bias = -0.0004;
+  scene.add(sun, sun.target);
+  R.sunLight = sun;
+  const fill = new THREE.DirectionalLight('#cfe6ff', 0.3); fill.position.set(14, 6, 10); scene.add(fill);
+  R.sun = sunSprite(); R.sun.scale.set(26, 26, 1); scene.add(R.sun);
+  R.clouds = [[-30, 22, -70, 1.6], [-6, 26, -85, 1.9], [20, 21, -75, 1.4], [42, 25, -90, 1.7], [-52, 24, -95, 1.8]].map(([x, y, z, s]) => ({ g: cloud(scene, x, y, z, s), x }));
+  R.W = buildWorlds();
+  R.bus = makeBus(); scene.add(R.bus.g);
+  R.c = { pip: makePip(), kitty: makeKitty(), ducky: makeDucky(), froggy: makeFroggy(), birdie: makeBirdie() };
+  R.mouths = { pip: mouthTextures('pip'), kitty: mouthTextures('kitty'), frog: mouthTextures('frog'), bus: mouthTextures('bus') };
+  R.flies = ['#ff8fc7', '#ffb347', '#8fd3ff', '#c49bff'].map((c) => butterfly(scene, c));
+  const sp = document.getElementById('sparks'), r = rng(21);
+  R.sparks = [];
+  for (let i = 0; i < 16; i++) {
+    const el = document.createElement('div'); el.className = 'spark';
+    el.innerHTML = `<svg viewBox="-26 -26 52 52"><path d="M0-26Q4-4 26 0Q4 4 0 26Q-4 4-26 0Q-4-4 0-26Z" fill="${i % 2 ? '#fff6a8' : '#ffffff'}"/></svg>`;
+    sp.appendChild(el);
+    R.sparks.push({ el, x: 960 + (r() - 0.5) * 1000, y: 230 + (r() - 0.5) * 320, d: r() * 0.5, s: 0.7 + r() * 0.9 });
+  }
+}
+
+// ---------- per-frame helpers ----------
+const look = (c) => { cam.position.set(c[0], c[1], c[2]); cam.lookAt(c[3], c[4], c[5]); };
+function camPath(u, keys) {
+  if (u <= keys[0][0]) return keys[0].slice(1);
+  for (let i = 0; i < keys.length - 1; i++) {
+    const a = keys[i], b = keys[i + 1];
+    if (u <= b[0]) { const k = ease((u - a[0]) / Math.max(0.001, b[0] - a[0])); return a.slice(1).map((v, j) => lerp(v, b[j + 1], k)); }
+  }
+  return keys[keys.length - 1].slice(1);
+}
+function blink(t, period, offset) {
+  const k = ((t + offset) % period) / 0.16;
+  return k < 1 ? Math.sin(k * Math.PI) : 0;
+}
+// Scene-relative times of the n-th line (1-based) and of cues.
+function ln(s, n) {
+  const base = `${s.id}_${String(n).padStart(2, '0')}`;
+  const l = T.lines[base] || Object.entries(T.lines).find(([k]) => k.startsWith(base + '_'))[1];
+  return { a: l.start - s.start, b: l.start - s.start + l.dur };
+}
+const cu = (s, name) => s.cues[name] - s.start;
+function hop(t, at, h = 0.5, d = 0.55) { const k = (t - at) / d; return k > 0 && k < 1 ? Math.sin(k * Math.PI) * h : 0; }
+
+function ambient(t, cx = 0) {
+  R.sun.position.set(cx + 34, 34, -95);
+  R.clouds.forEach((c, i) => { c.g.position.x = cx + ((c.x + t * (0.5 + i * 0.12) + 90) % 180) - 90; });
+  R.flies.forEach((f, i) => {
+    const bx = cx + [-7, 6, -2, 9][i], bz = [-3.2, -4, -2.8, -3.6][i];
+    f.g.position.set(bx + Math.sin(t * 0.6 + i * 2) * 3, 3.4 + i * 0.35 + Math.sin(t * 1.4 + i) * 0.5, bz + Math.cos(t * 0.5 + i) * 0.6);
+    f.g.rotation.y = Math.sin(t * 0.6 + i * 2) * 0.8;
+    f.g.visible = f.g.position.distanceTo(cam.position) > 7;
+    const flap = Math.sin(t * 14 + i) * 0.9;
+    f.wings[0].rotation.y = flap; f.wings[1].rotation.y = -flap;
+  });
+  for (const list of [R.valleyFlowers, R.meadowFlowers, R.pondFlowers]) list.forEach((f, i) => { f.head.rotation.z = Math.sin(t * 1.6 + i) * 0.12; });
+  R.sunLight.position.set(cx - 12, 22, 16);
+  R.sunLight.target.position.set(cx, 0, 0);
+}
+
+function setBus(t, x, dist, moving, z = 0, rotY = 0) {
+  const B = R.bus;
+  B.g.visible = true;
+  B.g.position.set(x, 0, z);
+  B.g.rotation.y = rotY;
+  B.bob.position.y = moving ? Math.abs(Math.sin(t * 9)) * 0.05 : Math.sin(t * 2.2) * 0.015;
+  B.bob.rotation.z = moving ? Math.sin(t * 9) * 0.006 : 0;
+  B.wheels.forEach((w) => { w.rotation.z = -dist / 0.66; });
+  const lid = 1 - 0.95 * blink(t, 4.1, 2.0);
+  B.eyes.forEach(({ e, iris }) => { e.scale.y = lid; iris.position.x = Math.sin(t * 0.8) * 0.05; iris.position.y = -0.03; });
+  B.mouth.material.map = R.mouths.bus[mouthAt('sunny', t)];
+  B.mouth.material.needsUpdate = true;
+}
+
+// Put a character on the ground at (x, z), or in a bus seat.
+function place(c, x, z, o = {}) {
+  scene.add(c.g);
+  c.g.visible = true;
+  c.g.position.set(x, o.y || 0, z);
+  c.g.rotation.set(0, o.rotY || 0, 0);
+  c.g.scale.setScalar(o.s || 1);
+}
+function seat(c, slot, o = {}) {
+  R.bus.slots[slot].add(c.g);
+  c.g.visible = true;
+  c.g.position.set(o.dx || 0, o.dy || 0, o.dz || 0);
+  c.g.rotation.set(0, o.rotY || 0, 0);
+  c.g.scale.setScalar(o.s || 1);
+}
+// Blink, talk, breathe; o.hop (height), o.tilt, o.look (head turn), o.flap, o.dance.
+function animate(c, t, o = {}) {
+  const shape = mouthAt(c.who, t);
+  const talking = shape !== 'X';
+  c.eyes.forEach((e) => { e.scale.y = (e.userData.sy || 1) * (1 - 0.95 * blink(t, 3.4 + c.who.length * 0.3, c.who.length)); });
+  if (c.mouth) { c.mouth.material.map = R.mouths[c.mouthStyle][shape]; c.mouth.material.needsUpdate = true; }
+  if (c.beakLow) c.beakLow.rotation.x = OPEN[shape] * 0.55;
+  const breathe = Math.sin(t * 2.4 + c.who.length) * 0.015;
+  c.inner.position.y = (o.hop || 0) + (o.dance ? Math.abs(Math.sin(t * 5.9)) * 0.25 : 0);
+  c.inner.scale.set(1 - breathe, 1 + breathe, 1 - breathe);
+  c.inner.rotation.z = o.dance ? Math.sin(t * 2.95) * 0.18 : 0;
+  c.head.rotation.z = (o.tilt || 0) + (talking ? Math.sin(t * 6) * 0.06 : Math.sin(t * 1.6 + c.who.length) * 0.03);
+  c.head.rotation.x = (o.lookUp || 0) + (talking ? Math.sin(t * 4.3) * 0.04 : 0);
+  c.head.rotation.y = o.look || 0;
+  if (c.wings) {
+    const f = o.flap ? Math.sin(t * 22) * 0.9 : Math.sin(t * 3 + c.who.length) * 0.08;
+    c.wings[0].rotation.z = -Math.abs(f) - 0.05; c.wings[1].rotation.z = Math.abs(f) + 0.05;
+  }
+  if (c.who === 'pip') {
+    c.belt.visible = !!o.belt;
+    c.armR.rotation.set(o.armRx || 0, 0, o.armR ?? 0.15);
+    c.armL.rotation.set(o.armLx || 0, 0, o.armL ?? -0.15);
+    const swing = o.walk ? Math.sin(t * 8) * 0.5 : 0;
+    c.legL.rotation.x = swing; c.legR.rotation.x = -swing;
+    if (o.walk) { c.armL.rotation.x = -swing * 0.6; c.armR.rotation.x = swing * 0.6; c.inner.position.y += Math.abs(Math.sin(t * 8)) * 0.06; }
+  }
+}
+// Pip's arms: wave (right), point (left, toward -x), clap, up (dance).
+const WAVE = (t) => ({ armR: 2.6 + Math.sin(t * 9) * 0.35 });
+const POINT = (t) => ({ armL: -(Math.PI / 2 + 0.45) + Math.sin(t * 3) * 0.08 });
+const POINT_R = (t) => ({ armR: Math.PI / 2 + 0.45 + Math.sin(t * 3) * 0.08 });
+const CLAP = (t) => { const k = Math.abs(Math.sin(t * 9)); return { armL: -1.0 - k * 0.35, armR: 1.0 + k * 0.35, armLx: -1.2, armRx: -1.2 }; };
+const ARMS_UP = (t) => ({ armL: -2.5 + Math.sin(t * 5.9) * 0.3, armR: 2.5 - Math.sin(t * 5.9) * 0.3 });
+
+function highlight(obj, ring, t, at, base = 1) {
+  const k = t - at;
+  const on = k > 0;
+  obj.scale.setScalar(base * (on ? 1 + 0.25 * backOut(clamp(k / 0.5)) + 0.05 * Math.sin(k * 6) : 1));
+  obj.rotation.y = on ? Math.sin(k * 2) * 0.4 : 0;
+  if (ring) { ring.material.opacity = on ? Math.min(0.9, k * 2) * (0.6 + 0.4 * Math.sin(k * 8)) : 0; ring.scale.setScalar(1 + 0.08 * Math.sin(k * 6)); }
+}
+
+// ---------- overlays ----------
+function word(text, color, a, b, t, o = {}) {
+  if (t < a || t >= b) return false;
+  R.wordShown = true;
+  const w = document.getElementById('wordWrap');
+  w.style.display = 'block';
+  const el = document.getElementById('wordText');
+  el.textContent = text;
+  el.style.color = color;
+  document.getElementById('word').style.color = color;
+  const pop = backOut(seg(t, a, a + 0.5));
+  const pulse = o.pulseFrom && t > o.pulseFrom && t < o.pulseTo ? 1 + 0.06 * Math.sin((t - o.pulseFrom) * 9) : 1;
+  el.style.transform = `scale(${pop * pulse * (1 - seg(t, b - 0.35, b))})`;
+  return true;
+}
+function dots(color, a, until, t) {
+  // The dots count the pause while children answer; they can show before the word does.
+  if (t > a && t < until && !R.wordShown) {
+    document.getElementById('wordWrap').style.display = 'block';
+    document.getElementById('wordText').textContent = '';
+    document.getElementById('word').style.color = color;
+  }
+  document.querySelectorAll('.dot').forEach((d, i) => {
+    const k = t - (a + i * 0.6);
+    const on = k > 0 && t < until;
+    d.style.visibility = on ? 'visible' : 'hidden';
+    d.style.borderColor = color;
+    d.style.transform = `scale(${on ? backOut(clamp(k / 0.3)) : 0})`;
+  });
+}
+function number(n, color, at, t, hold = 1.1) {
+  if (t < at || t > at + hold) return false;
+  const w = document.getElementById('numWrap');
+  w.style.display = 'block';
+  const el = document.getElementById('num');
+  el.textContent = n; el.style.color = color;
+  el.style.transform = `scale(${backOut(seg(t, at, at + 0.35)) * (1 - seg(t, at + hold - 0.25, at + hold))})`;
+  return true;
+}
+function sparkleAt(cue, t) {
+  R.sparks.forEach((s) => {
+    const a = (t - cue - s.d) / 0.9;
+    if (a > 0 && a < 1) {
+      s.el.style.display = 'block';
+      s.el.style.transform = `translate(${s.x - 26}px, ${s.y - 26}px) rotate(${a * 90}deg) scale(${Math.sin(a * Math.PI) * s.s})`;
+    }
+  });
+}
+
+// ---------- the scenes ----------
+// Each: worlds to show, and draw(s, u, t) with u = seconds into the scene.
+const C = () => R.c;
+const SCENES = {
+  s01: { worlds: ['valley'], draw(s, u, t) {
+    const d = s.dur, x = lerp(-24, -1.5, easeOut(seg(u, 0.2, 3.4))) + easeIn(seg(u, d - 1.4, d)) * 22;
+    ambient(t, -1.5);
+    setBus(t, x, x, u < 3.4 || u > d - 1.4);
+    const pop = backOut(seg(u, cu(s, 'pop'), cu(s, 'pop') + 0.45)), l1 = ln(s, 1), l2 = ln(s, 2);
+    seat(C().pip, 0, { s: Math.max(0.001, pop * 0.95), dy: -0.36 + pop * 0.15, dz: 0.5 + pop * 0.12 });
+    animate(C().pip, t, u > cu(s, 'pop') + 0.3 && u < l1.b + 0.4 ? WAVE(t) : {});
+    look(camPath(u, [[0, x + 2, 4.4, 18, x + 0.5, 2.2, 0], [l1.a + 0.2, -1.5 + 2, 4.4, 18, -1, 2.2, 0], [l1.a + 1.8, -1.5 + 1.8, 3.4, 6.2, -1.5 + 0.8, 2.95, 1.5],
+      [l2.a - 0.7, -1.5 + 1.8, 3.4, 6.2, -1.5 + 0.8, 2.95, 1.5], [l2.a + 0.4, -1.5 + 10.5, 2.8, 7.5, -1.5 + 3.6, 2.2, 0], [d - 1.4, -1.5 + 10.5, 2.8, 7.5, -1.5 + 3.6, 2.2, 0], [d, 2.5, 4.6, 20, 6.5, 2.2, 0]]));
+  } },
+  s02: { worlds: ['road'], draw(s, u, t) {
+    const dist = u * 7;
+    R.scroll.position.x = -(dist % 50.6); R.scrollTrees.position.x = -((dist * 0.9) % 52.8);
+    ambient(t, 0);
+    setBus(t, 0, dist, true);
+    seat(C().pip, 0, { s: 0.78, dy: -0.05, dz: 0.1 });
+    animate(C().pip, t, { belt: true });
+    const l2 = ln(s, 2);
+    look(camPath(u, [[0, -2, 3.3, 14.5, 0.3, 2.2, 0], [l2.a - 0.6, -1.5, 3.3, 14.5, 0.3, 2.2, 0], [l2.a + 0.8, 11.5, 2.7, 5.5, 2.8, 2.2, 0]]));
+  } },
+  s03: { worlds: ['valley', 'garden'], draw(s, u, t) {
+    ambient(t, 0);
+    const x = lerp(7.5, 2.6, easeOut(seg(u, 0, 1.3)));
+    setBus(t, x, x, u < 1.3);
+    seat(C().pip, 0, { s: 0.9, dy: -0.15, dz: 0.35 });
+    animate(C().pip, t, u > ln(s, 1).a - 0.2 ? POINT(t) : {});
+    R.bigFlowers.forEach((b, i) => { b.g.rotation.z = Math.sin(t * 1.5 + i * 1.3) * 0.05; b.head.scale.setScalar(1 + 0.04 * Math.sin(t * 3 + i)); });
+    const c = cu(s, 'color'), l3 = ln(s, 3);
+    look(camPath(u, [[0, -1.2, 4.2, 17.5, -1, 2.2, 0], [c - 0.3, -1.2, 4.2, 17.5, -1, 2.2, 0], [c + 1.0, -4.6, 1.9, 9.6, -4.6, 1.75, 3.6],
+      [l3.a + 0.2, -4.6, 1.9, 9.6, -4.6, 1.75, 3.6], [l3.a + 1.7, -0.8, 3.6, 14.5, -1.2, 2.3, 1]]));
+    word('RED', COLORS.red, s.cues.color, s.start + s.dur, t, { pulseFrom: s.cues.ask, pulseTo: s.cues.answer + 2.2 });
+    dots(COLORS.red, s.cues.answer, s.cues.sparkle, t);
+    sparkleAt(s.cues.color, t); sparkleAt(s.cues.sparkle, t);
+  } },
+  s04: { worlds: ['valley', 'garden'], draw(s, u, t) {
+    ambient(t, -2);
+    setBus(t, 4.5, 0, false, -1.5);
+    const k = easeOut(seg(u, 0, 2.6));
+    place(C().pip, lerp(1.6, -1.3, k), lerp(5.6, 5.0, k), { rotY: lerp(-1.2, -0.75, k) });
+    const l1 = ln(s, 1), l2 = ln(s, 2), l3 = ln(s, 3);
+    animate(C().pip, t, { walk: u < 2.6, ...(u > l1.a && u < l1.a + 1.4 ? WAVE(t) : {}), look: -0.2 });
+    place(C().kitty, -3.4, 5.2, { rotY: 0.7 });
+    animate(C().kitty, t, { tilt: u < l2.a ? 0.25 : 0, look: 0.3 });
+    look(camPath(u, [[0, -0.5, 2.6, 13.5, -1.5, 1.3, 4.5], [l2.a - 0.3, -1.6, 2.0, 10.8, -2.2, 1.2, 5], [l2.a + 0.6, -2.6, 1.6, 9.6, -2.5, 1.15, 5.1],
+      [l3.a, -2.6, 1.6, 9.6, -2.5, 1.15, 5.1], [l3.a + 0.9, -1.8, 2.0, 10.6, -2.3, 1.3, 5]]));
+  } },
+  s05: { worlds: ['valley', 'rby'], draw(s, u, t) {
+    ambient(t, 0);
+    setBus(t, 7.5, 0, false, -3.5);
+    place(C().pip, -5.2, 4.4, { rotY: 0.5 });
+    const l1 = ln(s, 1), found = cu(s, 'found');
+    animate(C().pip, t, u < found ? POINT_R(t) : u < found + 1.5 ? WAVE(t) : {});
+    const jump = cu(s, 'jump');
+    place(C().kitty, lerp(4.6, -1.3, easeOut(seg(u, jump - 0.4, jump + 0.6))), 4.6, { rotY: -0.4 });
+    animate(C().kitty, t, { hop: hop(u, jump, 0.6, 0.6) + hop(u, jump + 0.7, 0.3, 0.45) });
+    R.rby.forEach((f, i) => { f.g.rotation.z = Math.sin(t * 1.5 + i) * 0.05; if (i) f.g.scale.setScalar(1 - 0.12 * easeOut(seg(u, found, found + 0.6))); });
+    highlight(R.rby[0].g, R.rbyRing, u, found);
+    look(camPath(u, [[0, 0, 2.6, 12, 0, 1.8, 3.2], [found, 0, 2.4, 11.5, -0.3, 1.8, 3.2], [found + 1.0, -1.6, 2.1, 9.8, -1.8, 1.6, 3.6]]));
+    dots(COLORS.red, s.cues.answer, s.cues.found, t);
+    word('RED', COLORS.red, s.cues.found, s.start + s.dur, t);
+    sparkleAt(s.cues.found, t);
+  } },
+  s06: { worlds: ['valley', 'garden'], draw(s, u, t) {
+    ambient(t, -3);
+    setBus(t, 4.5, 0, false, -2.5);
+    const clap = cu(s, 'clap');
+    place(C().pip, -1.4, 5.6, { rotY: -0.5 });
+    animate(C().pip, t, u > clap && u < clap + 1.6 ? CLAP(t) : POINT(t));
+    place(C().kitty, -7.6, 5.4, { rotY: 0.6 });
+    animate(C().kitty, t, { hop: hop(u, cu(s, 'n2'), 0.4) + hop(u, clap, 0.5) + hop(u, clap + 0.6, 0.4) });
+    const ns = ['n1', 'n2', 'n3'].map((n) => cu(s, n));
+    R.bigFlowers.forEach((b, i) => {
+      b.g.rotation.z = Math.sin(t * 1.5 + i * 1.3) * 0.05;
+      b.head.scale.setScalar(1 + 0.35 * Math.sin(Math.PI * clamp((u - ns[i]) / 0.45)));
+    });
+    const fx = R.bigFlowers.map((b) => b.g.position.x);
+    const close = (i) => [fx[i] + 0.4, 1.9, 8.2, fx[i], 1.7, 3.6];
+    look(camPath(u, [[0, -4.0, 2.4, 13.5, -4.2, 1.6, 4], [ns[0] - 0.3, -4.0, 2.4, 13.5, -4.2, 1.6, 4], [ns[0] + 0.2, ...close(0)], [ns[1] + 0.2, ...close(1)],
+      [ns[2] + 0.2, ...close(2)], [clap + 0.2, -4.2, 2.3, 13, -4.3, 1.5, 4.5]]));
+    ns.forEach((n, i) => number(i + 1, COLORS.red, s.start + n, t, i === 2 ? 2.4 : 1.0));
+    if (u > clap + 1.2) word('RED', COLORS.red, s.start + clap + 1.2, s.start + s.dur, t);
+  } },
+  s07: { worlds: ['pond'], draw(s, u, t) {
+    ambient(t, 0);
+    const x = lerp(-16, 5.0, easeOut(seg(u, 0, 2.4)));
+    setBus(t, x, x, u < 2.4, 3.4);
+    seat(C().pip, 0, { s: 0.9, dy: -0.15, dz: 0.35 });
+    const l3 = ln(s, 3), c = cu(s, 'color');
+    animate(C().pip, t, u > l3.a ? WAVE(t) : {});
+    look(camPath(u, [[0, -4, 6.5, 22, -1, 1.0, -1.5], [c - 0.4, -2, 6.0, 20, -1, 1.0, -1.5], [c + 1.0, -1, 3.0, 11, -1.5, 0.8, -1.5], [l3.a + 0.4, 2, 3.4, 15, 1.5, 1.8, 3]]));
+    word('YELLOW', COLORS.yellow, s.cues.color, s.start + s.dur, t);
+    sparkleAt(s.cues.color, t);
+  } },
+  s08: { worlds: ['pond'], draw(s, u, t) {
+    ambient(t, 0);
+    setBus(t, 8, 0, false, -5.5, -0.2);
+    const l2 = ln(s, 2), flap = cu(s, 'flap');
+    place(C().ducky, 1.2, 3.4, { rotY: -0.3 });
+    animate(C().ducky, t, { look: Math.sin(t * 1.4) * 0.5 * (u < l2.a ? 1 : 0), flap: u > flap && u < flap + 1.2, hop: hop(u, flap, 0.25, 0.4) + hop(u, flap + 0.45, 0.25, 0.4) });
+    const k = easeOut(seg(u, l2.a - 2.0, l2.a + 0.2));
+    place(C().pip, lerp(-6, -1.6, k), 3.8, { rotY: lerp(1.3, 0.6, k) });
+    animate(C().pip, t, { walk: k > 0 && k < 1, ...(u > l2.a && u < l2.a + 1.4 ? WAVE(t) : {}) });
+    look(camPath(u, [[0, 1.3, 1.25, 6.6, 1.2, 1.05, 3.4], [l2.a - 1.8, 1.3, 1.25, 6.6, 1.2, 1.05, 3.4], [l2.a + 0.4, -0.3, 2.0, 11, -0.2, 1.2, 3.5]]));
+  } },
+  s09: { worlds: ['pond'], draw(s, u, t) {
+    ambient(t, 0);
+    R.pondGame.visible = true;
+    setBus(t, 9, 0, false, -6, -0.2);
+    const found = cu(s, 'found'), jump = cu(s, 'jump');
+    place(C().pip, -5.0, 4.6, { rotY: 0.5 });
+    animate(C().pip, t, u < found ? POINT_R(t) : u < found + 1.5 ? WAVE(t) : {});
+    place(C().ducky, lerp(4.8, 1.2, easeOut(seg(u, jump - 0.3, jump + 0.6))), 4.8, { rotY: -0.4 });
+    animate(C().ducky, t, { hop: hop(u, jump, 0.5) + hop(u, jump + 0.7, 0.35), flap: u > jump && u < jump + 1.4 });
+    R.game9[1].rotation.z = Math.sin(t * 1.5) * 0.08;
+    R.game9.forEach((o, i) => { if (i !== 1) o.scale.setScalar(1 - 0.12 * easeOut(seg(u, found, found + 0.6))); });
+    highlight(R.game9[1], R.ring9, u, found);
+    look(camPath(u, [[0, 0, 2.6, 12.5, 0, 0.8, 3.6], [found, 0, 2.2, 10.5, 0, 0.8, 3.6], [found + 1.0, 0.4, 1.6, 8.0, 0.2, 0.8, 3.6]]));
+    dots(COLORS.yellow, s.cues.answer, s.cues.found, t);
+    word('YELLOW', COLORS.yellow, s.cues.found, s.start + s.dur, t);
+    sparkleAt(s.cues.found, t);
+  } },
+  s10: { worlds: ['pond'], draw(s, u, t) {
+    ambient(t, 0);
+    setBus(t, 9, 0, false, -6, -0.2);
+    place(C().pip, -1.3, 4.4, { rotY: 0.25 + Math.sin(t * 2.95) * 0.3 });
+    animate(C().pip, t, { dance: true, ...(u < ln(s, 1).b ? ARMS_UP(t) : CLAP(t)) });
+    place(C().ducky, 1.3, 4.4, { rotY: -0.25 - Math.sin(t * 2.95) * 0.3 });
+    animate(C().ducky, t, { dance: true, flap: Math.sin(t * 2.95) > 0.3 });
+    const a = u * 0.25;
+    look([Math.sin(a - 0.4) * 6.8, 1.9, 4.4 + Math.cos(a - 0.4) * 6.8, 0, 1.0, 4.4]);
+  } },
+  s11: { worlds: ['forest'], draw(s, u, t) {
+    const x = lerp(-18, 16, u / s.dur);
+    ambient(t, x);
+    setBus(t, x, x * 1.0, true);
+    seat(C().pip, 0, { s: 0.9, dy: -0.15, dz: 0.35 });
+    animate(C().pip, t, u > ln(s, 1).a && u < ln(s, 1).b + 0.3 ? WAVE(t) : {});
+    const l2 = ln(s, 2);
+    look(camPath(u, [[0, x - 6, 13, 22, x, 1.5, 0], [l2.a - 1.0, x + 2, 4.5, 12, x + 0.5, 2.3, 0], [s.dur, x + 4, 3.4, 9.5, x + 1, 2.4, 0]]));
+    word('GREEN', COLORS.green, s.cues.color, s.start + s.dur, t);
+    sparkleAt(s.cues.color, t);
+  } },
+  s12: { worlds: ['forest'], draw(s, u, t) {
+    ambient(t, 0);
+    R.froggyLeaf.visible = true;
+    setBus(t, -9, 0, false, -1.5);
+    place(C().froggy, 0.3, 4.3, { rotY: -0.15, y: 0.08 });
+    animate(C().froggy, t, { hop: hop(u, ln(s, 1).a, 0.25, 0.4) + hop(u, ln(s, 1).a + 0.45, 0.25, 0.4) });
+    const l2 = ln(s, 2), l4 = ln(s, 4);
+    const k = easeOut(seg(u, l2.a - 2.2, l2.a + 0.1));
+    place(C().pip, lerp(-6.5, -2.0, k), 4.6, { rotY: lerp(1.3, 0.6, k) });
+    animate(C().pip, t, { walk: k > 0 && k < 1, ...(u > l2.a && u < l2.a + 1.2 ? WAVE(t) : {}) });
+    look(camPath(u, [[0, 0.4, 0.95, 6.4, 0.3, 0.75, 4.3], [l2.a - 2.0, 0.4, 0.95, 6.4, 0.3, 0.75, 4.3], [l2.a + 0.3, -0.8, 1.9, 11, -0.8, 0.9, 4.4], [l4.a, -0.8, 1.9, 11, -0.8, 0.9, 4.4], [l4.b, -0.6, 1.6, 9.5, -0.7, 0.9, 4.4]]));
+  } },
+  s13: { worlds: ['forest'], draw(s, u, t) {
+    ambient(t, 0);
+    R.forestGame.visible = true;
+    setBus(t, -10, 0, false, -1.5);
+    const found = cu(s, 'found'), jump = cu(s, 'jump');
+    place(C().pip, 5.0, 4.8, { rotY: -0.5 });
+    animate(C().pip, t, u < found ? POINT(t) : u < found + 1.5 ? WAVE(t) : {});
+    place(C().froggy, lerp(-5, -1.3, easeOut(seg(u, jump - 0.3, jump + 0.6))), 4.9, { rotY: 0.4 });
+    animate(C().froggy, t, { hop: hop(u, jump, 0.7) + hop(u, jump + 0.75, 0.4) });
+    R.game13.forEach((o, i) => { if (i) o.scale.setScalar(1 - 0.12 * easeOut(seg(u, found, found + 0.6))); });
+    highlight(R.game13[0], R.ring13, u, found);
+    look(camPath(u, [[0, 0, 2.6, 12.5, 0, 0.8, 3.6], [found, 0, 2.2, 10.5, 0, 0.8, 3.6], [found + 1.0, -1.6, 1.6, 8.0, -1.8, 0.8, 3.6]]));
+    dots(COLORS.green, s.cues.answer, s.cues.found, t);
+    word('GREEN', COLORS.green, s.cues.found, s.start + s.dur, t);
+    sparkleAt(s.cues.found, t);
+  } },
+  s14: { worlds: ['forest'], draw(s, u, t) {
+    ambient(t, 0);
+    setBus(t, -10, 0, false, -1.5);
+    place(C().pip, -2.6, 5.4, { rotY: 0.4 });
+    animate(C().pip, t, { lookUp: -0.25, ...POINT_R(t) });
+    place(C().froggy, 2.6, 5.4, { rotY: -0.4, y: 0 });
+    const l2 = ln(s, 2);
+    animate(C().froggy, t, { hop: hop(u, l2.a, 0.6) + hop(u, l2.a + 0.7, 0.4), lookUp: -0.2 });
+    const ns = ['n1', 'n2', 'n3', 'n4', 'n5'].map((n) => cu(s, n));
+    R.fallLeaves.forEach((lf, i) => {
+      const land = ns[i], k = seg(u, land - 2.2, land);
+      const lx = -1.6 + i * 0.8, lz = 4.4 + (i % 2) * 0.5;
+      lf.position.set(lx + Math.sin(u * 2.2 + i) * 0.5 * (1 - k), lerp(6.5, 0.12, k), lz);
+      lf.rotation.set(k < 1 ? Math.sin(u * 3 + i) * 0.6 : -Math.PI / 2, i * 0.7, k < 1 ? Math.sin(u * 2.5 + i) * 0.8 : 0);
+      lf.scale.setScalar(1 + 0.4 * Math.sin(Math.PI * clamp((u - land) / 0.4)));
+      lf.visible = u > land - 2.2;
+    });
+    look(camPath(u, [[0, 0, 3.8, 13, 0, 3.2, 4.4], [ns[0] - 0.4, 0, 3.2, 13, 0, 1.9, 4.4], [ns[4] + 0.3, 0, 2.8, 12.5, 0, 0.9, 4.6]]));
+    ns.forEach((n, i) => number(i + 1, COLORS.green, s.start + n, t, i === 4 ? 2.4 : Math.min(1.0, ns[i + 1] - n || 1)));
+  } },
+  s15: { worlds: ['meadow'], draw(s, u, t) {
+    ambient(t, 0);
+    setBus(t, -4.5, 0, false, 0.5);
+    place(C().pip, 1.4, 4.0, { rotY: -0.3 });
+    const c = cu(s, 'color');
+    animate(C().pip, t, { lookUp: -0.45 * easeOut(seg(u, ln(s, 1).a, ln(s, 1).a + 0.8)), ...(u > c ? WAVE(t) : POINT_R(t)) });
+    look(camPath(u, [[0, 2.5, 1.6, 11, 0, 2.2, 1.5], [ln(s, 2).a, 2.5, 1.4, 10.5, 0, 3.0, 1.5], [c, 2.0, 1.2, 9.5, 0, 9, -10], [c + 2.6, 2.0, 1.2, 9.5, 0, 11, -12]]));
+    word('BLUE', COLORS.blue, s.cues.color, s.start + s.dur, t);
+    sparkleAt(s.cues.color, t);
+  } },
+  s16: { worlds: ['meadow'], draw(s, u, t) {
+    ambient(t, 0);
+    R.birdTree.visible = true;
+    setBus(t, -10, 0, false, -4);
+    place(C().birdie, 1.8, -0.1, { y: 2.9, rotY: -0.25 });
+    animate(C().birdie, t, { flap: u < ln(s, 1).b || (u > ln(s, 3).a && u < ln(s, 3).a + 0.8), hop: hop(u, ln(s, 3).a, 0.2, 0.4) });
+    const l2 = ln(s, 2);
+    const k = easeOut(seg(u, l2.a - 2.0, l2.a + 0.1));
+    place(C().pip, lerp(-5.5, -1.2, k), 2.6, { rotY: lerp(1.3, 0.5, k) });
+    animate(C().pip, t, { walk: k > 0 && k < 1, lookUp: -0.35 * k, ...(u > l2.a && u < l2.a + 1.3 ? WAVE(t) : {}) });
+    look(camPath(u, [[0, 1.6, 1.6, 8.5, 1.7, 2.6, 0], [l2.a - 1.6, 1.7, 3.0, 6.5, 1.8, 3.2, 0], [l2.a + 0.3, 0.2, 2.6, 11, 0.4, 2.3, 1], [s.dur, 1.0, 3.2, 8.0, 1.3, 3.0, 0.5]]));
+  } },
+  s17: { worlds: ['meadow'], draw(s, u, t) {
+    ambient(t, 0);
+    R.meadowGame.visible = true;
+    setBus(t, -10, 0, false, -4);
+    const found = cu(s, 'found'), jump = cu(s, 'jump');
+    place(C().pip, -5.0, 4.6, { rotY: 0.5 });
+    animate(C().pip, t, u < found ? POINT_R(t) : u < found + 1.5 ? WAVE(t) : {});
+    place(C().birdie, lerp(5.2, 3.6, easeOut(seg(u, jump - 0.3, jump + 0.6))), 4.6, { rotY: -0.4, y: 0.9 + Math.sin(t * 3) * 0.15 });
+    animate(C().birdie, t, { flap: true, hop: hop(u, jump, 0.4) });
+    R.game17Wings[0].rotation.y = Math.sin(t * 6) * 0.5; R.game17Wings[1].rotation.y = -Math.sin(t * 6) * 0.5;
+    R.game17.forEach((o, i) => { if (i !== 2) o.scale.setScalar(1 - 0.12 * easeOut(seg(u, found, found + 0.6))); });
+    highlight(R.game17[2], R.ring17, u, found, 2.2);
+    look(camPath(u, [[0, 0, 2.6, 12.5, 0, 0.8, 3.6], [found, 0, 2.2, 10.5, 0, 0.8, 3.6], [found + 1.0, 1.8, 1.7, 8.0, 2.2, 0.9, 3.6]]));
+    dots(COLORS.blue, s.cues.answer, s.cues.found, t);
+    word('BLUE', COLORS.blue, s.cues.found, s.start + s.dur, t);
+    sparkleAt(s.cues.found, t);
+  } },
+  s18: { worlds: ['meadow'], draw(s, u, t) {
+    ambient(t, 0);
+    setBus(t, 0, 0, false, -3.2);
+    const row = [['kitty', -3.4], ['ducky', -1.7], ['pip', 0], ['froggy', 1.7], ['birdie', 3.3]];
+    const fs = ['f1', 'f2', 'f3', 'f4'].map((f) => cu(s, f)), laugh = cu(s, 'laugh');
+    row.forEach(([who, x]) => {
+      place(C()[who], x, 2.6, { rotY: -x * 0.06, y: who === 'birdie' ? 0.25 : 0 });
+      const i = FRIENDS.indexOf(who);
+      animate(C()[who], t, { hop: (i >= 0 ? hop(u, fs[i], 0.5) : 0) + hop(u, laugh, 0.35, 0.45) + hop(u, laugh + 0.55, 0.3, 0.45),
+        flap: who === 'birdie' && u > fs[3] && u < fs[3] + 1, ...(who === 'pip' && u < ln(s, 1).b + 0.3 ? WAVE(t) : {}) });
+    });
+    const at = (x, h) => [x, h + 0.5, 6.4, x, h * 0.6, 2.6];
+    look(camPath(u, [[0, 0, 2.6, 12.5, 0, 1.2, 2.6], [fs[0] - 0.3, 0, 2.6, 12.5, 0, 1.2, 2.6], [fs[0], ...at(-3.4, 1.2)], [fs[1] - 0.05, ...at(-3.4, 1.2)],
+      [fs[1] + 0.25, ...at(-1.7, 1.2)], [fs[2] - 0.05, ...at(-1.7, 1.2)], [fs[2] + 0.25, ...at(1.7, 0.9)], [fs[3] - 0.05, ...at(1.7, 0.9)],
+      [fs[3] + 0.25, ...at(3.3, 1.0)], [laugh, ...at(3.3, 1.0)], [laugh + 0.8, 0, 2.6, 12.5, 0, 1.2, 2.6]]));
+  } },
+  s19: { worlds: ['meadow'], draw(s, u, t) {
+    const x0 = -6 + u * 1.4;
+    ambient(t, x0);
+    setBus(t, x0 + 1.5, (x0 + 1.5) * 1.0, true, -1.8);
+    const cs = ['c1', 'c2', 'c3', 'c4'].map((c) => cu(s, c));
+    const parade = [['pip', 0], ['kitty', -2.0], ['ducky', -3.6], ['froggy', -5.2], ['birdie', -6.7]];
+    parade.forEach(([who, dx], i) => {
+      place(C()[who], x0 + dx + 0.5, 2.9, { rotY: 1.2, y: who === 'birdie' ? 0.8 + Math.sin(t * 3) * 0.12 : 0 });
+      const k = FRIENDS.indexOf(who);
+      animate(C()[who], t, { walk: who === 'pip', hop: who !== 'pip' && who !== 'birdie' ? Math.abs(Math.sin(t * 6 + i)) * 0.18 + (k >= 0 ? hop(u, cs[k], 0.4) : 0) : 0,
+        flap: who === 'birdie', look: -0.9, ...(who === 'pip' ? WAVE(t) : {}) });
+      if (k >= 0) {
+        const b = R.balloons[k];
+        b.visible = true;
+        const c = C()[who];
+        b.position.set(c.g.position.x - 0.25, (who === 'birdie' ? 1.4 : c.headY + 0.4) + 1.9 + Math.sin(t * 2 + k) * 0.08 + (u > cs[k] ? 0.25 * Math.sin(Math.PI * clamp((u - cs[k]) / 0.5)) : 0), 2.9);
+        b.scale.setScalar(1 + 0.15 * Math.sin(Math.PI * clamp((u - cs[k]) / 0.5)));
+      }
+    });
+    look([x0 - 3, 2.6, 13.5, x0 - 3, 2.0, 2]);
+    const names = ['RED', 'YELLOW', 'GREEN', 'BLUE'], cols = [COLORS.red, COLORS.yellow, COLORS.green, COLORS.blue];
+    cs.forEach((c, i) => word(names[i], cols[i], s.start + c, s.start + (cs[i + 1] ?? s.dur), t));
+  } },
+  s20: { worlds: ['meadow'], draw(s, u, t) {
+    ambient(t, 0);
+    place(C().pip, 0, 4.0, {});
+    animate(C().pip, t, u < ln(s, 1).b ? WAVE(t) : {});
+    FRIENDS.forEach((who, i) => {
+      place(C()[who], [-3.9, -2.0, 2.0, 3.9][i], 3.0, { y: who === 'birdie' ? 0.25 : 0 });
+      animate(C()[who], t, { hop: ['d1', 'd2', 'd3', 'd4'].map((d) => hop(u, cu(s, d), 0.3, 0.4)).reduce((a, b) => a + b, 0), flap: who === 'birdie' && u > cu(s, 'd1') });
+    });
+    const keys = ['c1', 'c2', 'c3', 'c4'], keys2 = ['d1', 'd2', 'd3', 'd4'];
+    R.balloons.forEach((b, i) => {
+      b.visible = true;
+      const p = Math.max(...[keys[i], keys2[i]].map((k) => Math.sin(Math.PI * clamp((u - cu(s, k)) / 0.5))));
+      b.position.set(-3.6 + i * 2.4, 3.9 + Math.sin(t * 1.8 + i) * 0.12 + p * 0.3, 1.0);
+      b.scale.setScalar(1.6 * (1 + 0.25 * p));
+    });
+    look(camPath(u, [[0, 0, 2.2, 13.5, 0, 2.6, 2], [ln(s, 2).a, 0, 2.6, 12.5, 0, 3.0, 2]]));
+    const names = ['RED', 'YELLOW', 'GREEN', 'BLUE'], cols = [COLORS.red, COLORS.yellow, COLORS.green, COLORS.blue];
+    for (const ks of [keys, keys2]) ks.forEach((k, i) => word(names[i], cols[i], s.cues[k], i < 3 ? s.cues[ks[i + 1]] : s.cues[k] + 0.9, t));
+  } },
+  s21: { worlds: ['meadow'], draw(s, u, t) {
+    ambient(t, 0);
+    R.friendTree.visible = true;
+    const gather = easeOut(seg(u, 0, 1.6));
+    const spots = [['pip', 0, 3.4], ['kitty', -2.0, 3.0], ['ducky', 2.0, 3.0], ['froggy', -3.6, 2.4], ['birdie', 3.5, 2.4]];
+    spots.forEach(([who, x, z], i) => {
+      place(C()[who], x * lerp(1.6, 1, gather), z, { rotY: -x * 0.08, y: who === 'birdie' ? 0.25 : 0 });
+      const talk = mouthAt(who, t) !== 'X';
+      animate(C()[who], t, { walk: who === 'pip' && gather < 1, hop: talk ? Math.abs(Math.sin(t * 5)) * 0.12 : 0, flap: who === 'birdie' && talk, ...(who === 'pip' && u > ln(s, 1).a && u < ln(s, 1).b ? WAVE(t) : {}) });
+    });
+    look(camPath(u, [[0, 0, 4.0, 19, 0, 3.4, -1], [s.dur, 0, 3.0, 14.5, 0, 2.6, 0]]));
+  } },
+  s22: { worlds: ['road'], draw(s, u, t) {
+    const dist = u * 7;
+    R.scroll.position.x = -(dist % 50.6); R.scrollTrees.position.x = -((dist * 0.9) % 52.8);
+    ambient(t, 0);
+    setBus(t, 0, dist, true);
+    seat(C().pip, 0, { s: 0.78, dy: -0.05, dz: 0.1 });
+    animate(C().pip, t, { belt: true, ...(u < ln(s, 1).b + 0.6 ? WAVE(t) : {}) });
+    seat(C().kitty, 1, { s: 0.7, dx: -0.3, dy: 0.5, dz: 0.2 });
+    seat(C().ducky, 1, { s: 0.7, dx: 0.32, dy: 0.5, dz: 0.2 });
+    seat(C().froggy, 2, { s: 0.75, dx: -0.28, dy: 0.95, dz: 0.2 });
+    seat(C().birdie, 2, { s: 0.85, dx: 0.32, dy: 0.75, dz: 0.2 });
+    FRIENDS.forEach((w) => animate(C()[w], t, { hop: Math.abs(Math.sin(t * 4 + w.length)) * 0.04 }));
+    look(camPath(u, [[0, -0.8, 3.0, 10.5, -0.8, 2.6, 0], [ln(s, 1).b, 0.2, 3.0, 10.5, -0.2, 2.6, 0], [ln(s, 2).a + 0.3, 11.5, 2.7, 5.5, 2.8, 2.3, 0.2], [s.dur, 12.5, 2.7, 5.0, 2.9, 2.3, 0.2]]));
+  } },
+  s23: { worlds: ['recap'], draw(s, u, t) {
+    const rs = ['r1', 'r2', 'r3', 'r4'].map((r) => cu(s, r));
+    let i = 0; rs.forEach((r, k) => { if (u >= r - 0.3) i = k; });
+    const tint = ['#ffd6d4', '#fff1b8', '#d6f5d0', '#9fd6ff'][i];
+    R.backdrop.material.color.set(tint);
+    R.recapObjs.forEach((o, k) => {
+      o.visible = k === i;
+      const a = u - rs[k];
+      o.scale.setScalar(Math.max(0.001, backOut(clamp((a + 0.3) / 0.6))));
+      o.rotation.y = k === 1 ? 0 : Math.sin(a * 1.2) * 0.5;
+      o.position.y = 1.5 + Math.sin(a * 2) * 0.1;
+    });
+    R.recapClouds.forEach((c, k) => { c.position.x = (k ? 1.5 : -3) + Math.sin(t * 0.4 + k) * 0.6; });
+    look([0, 1.6, 9, 0, 1.4, 0]);
+    const names = ['RED', 'YELLOW', 'GREEN', 'BLUE'], cols = [COLORS.red, COLORS.yellow, COLORS.green, COLORS.blue];
+    rs.forEach((r, k) => word(names[k], cols[k], s.start + r, s.start + (rs[k + 1] ?? s.dur) - 0.3, t));
+    rs.forEach((r) => sparkleAt(s.start + r, t));
+  } },
+  s24: { worlds: ['meadow'], draw(s, u, t) {
+    ambient(t, 0);
+    setBus(t, 4.6, 0, false, -1.6, -0.35);
+    const spots = [['pip', -0.6, 4.2], ['kitty', -2.6, 3.8], ['ducky', 1.4, 4.0], ['froggy', -4.3, 3.4], ['birdie', 3.1, 3.6]];
+    const bye = cu(s, 'rainbow');
+    spots.forEach(([who, x, z], i) => {
+      place(C()[who], x, z, { rotY: -x * 0.05, y: who === 'birdie' ? 0.9 + Math.sin(t * 3) * 0.12 : 0 });
+      animate(C()[who], t, { hop: u > bye ? Math.abs(Math.sin(t * 4 + i)) * 0.2 : 0, flap: who === 'birdie' || (who === 'ducky' && u > bye), ...(who === 'pip' && u > ln(s, 1).a ? WAVE(t) : {}) });
+    });
+    R.skyRainbow.visible = u > bye - 0.2;
+    R.skyRainbow.position.set(0, 3, -26);
+    R.skyRainbow.scale.setScalar(Math.max(0.001, 2.0 * easeOut(seg(u, bye, bye + 1.6))));
+    const th = cu(s, 'thanks');
+    look(camPath(u, [[0, 0, 2.4, 13.5, 0, 1.6, 2], [bye, 0, 2.6, 15, 0, 2.2, 1], [th, 0, 3.2, 18, 0, 4.5, -4]]));
+    const end = document.getElementById('end');
+    end.style.display = u > th - 0.1 ? 'flex' : 'none';
+    const sub = cu(s, 'subscribe');
+    document.getElementById('end1').style.transform = `scale(${backOut(seg(u, th, th + 0.5))})`;
+    document.getElementById('end2').style.transform = `scale(${backOut(seg(u, sub, sub + 0.5))})`;
+    document.getElementById('brand').style.opacity = clamp((u - sub - 0.4) / 0.4);
+    sparkleAt(s.cues.thanks, t); sparkleAt(s.cues.subscribe, t);
+  } },
+};
+const FRIENDS = ['kitty', 'ducky', 'froggy', 'birdie'];
+
+function render(t) {
+  // Reset what scenes switch on.
+  ['wordWrap', 'numWrap', 'end'].forEach((id) => { document.getElementById(id).style.display = 'none'; });
+  document.querySelectorAll('.dot').forEach((d) => { d.style.visibility = 'hidden'; });
+  R.sparks.forEach((s) => { s.el.style.display = 'none'; });
+  R.flies.forEach((f) => { f.g.visible = false; });
+  R.wordShown = false;
+  Object.values(R.W).forEach((w) => { w.visible = false; });
+  Object.values(R.c).forEach((c) => { c.g.visible = false; });
+  R.balloons.forEach((b) => { b.visible = false; });
+  R.fallLeaves.forEach((l) => { l.visible = false; });
+  R.birdTree.visible = false; R.friendTree.visible = false; R.skyRainbow.visible = false;
+  R.pondGame.visible = false; R.forestGame.visible = false; R.meadowGame.visible = false; R.froggyLeaf.visible = false;
+  R.bus.g.visible = false;
+  scene.background = R.sky; scene.fog.far = 260;
+
+  const title = document.getElementById('title');
+  title.style.display = t < T.title ? 'flex' : 'none';
+  if (t < T.title) {
+    [...title.children].forEach((d, i) => { d.style.transform = `translateY(${Math.sin(t * 3 + i) * 6}px) scale(${backOut(seg(t, 0.5 + i * 0.35, 1.2 + i * 0.35))})`; });
+    R.W.valley.visible = true;
+    R.skyRainbow.visible = true;
+    R.skyRainbow.position.set(0, 0, -6);
+    R.skyRainbow.scale.setScalar(Math.max(0.001, backOut(seg(t, 0.1, 1.0))));
+    ambient(t, 0);
+    look([0, 3.2 + t * 0.15, 17, 0, 4.2, -6]);
+  } else {
+    const s = T.scenes.find((x) => t >= x.start && t < x.start + x.dur) || T.scenes[T.scenes.length - 1];
+    const def = SCENES[s.id];
+    def.worlds.forEach((w) => { R.W[w].visible = true; });
+    if (s.id === 's23') { scene.background = new THREE.Color('#ffffff'); scene.fog.far = 1000; }
+    def.draw(s, t - s.start, t);
+  }
+  let flash = 0;
+  for (const s of T.scenes) flash = Math.max(flash, 1 - Math.abs(t - s.start) / 0.3);
+  document.getElementById('flash').style.opacity = clamp(flash) * 0.85;
+  renderer.render(scene, cam);
+}
+</script>
+</body>
+</html>

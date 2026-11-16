@@ -1,0 +1,6 @@
+node_modules/
+.venv/
+**/out/frames/
+**/out/*.wav
+**/out/*.png
+**/clips/

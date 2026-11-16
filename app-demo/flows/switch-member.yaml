@@ -1,0 +1,45 @@
+appId: host.exp.Exponent
+---
+- tapOn:
+    id: tab-me
+- scrollUntilVisible:
+    element:
+      id: sign-out
+    visibilityPercentage: 50
+- waitForAnimationToEnd
+- tapOn:
+    id: sign-out
+- waitForAnimationToEnd
+- tapOn:
+    id: confirm-sign-out
+- extendedWaitUntil:
+    visible:
+      id: who
+    timeout: 20000
+- tapOn:
+    id: who
+- eraseText: 20
+- inputText: ${PHONE}
+- runFlow: /Users/rameshrawat/gymbahi/mobile/e2e/subflows/dismiss-keyboard.yaml
+- tapOn:
+    id: send-code
+- extendedWaitUntil:
+    visible:
+      id: code
+    timeout: 20000
+- tapOn:
+    id: code
+- inputText: ${CODE}
+- runFlow: /Users/rameshrawat/gymbahi/mobile/e2e/subflows/dismiss-keyboard.yaml
+- tapOn:
+    id: sign-in
+- extendedWaitUntil:
+    visible:
+      id: qr-card
+    timeout: 30000
+- waitForAnimationToEnd
+- tapOn:
+    id: tab-renew
+- waitForAnimationToEnd
+- tapOn:
+    id: tab-home
