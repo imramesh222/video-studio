@@ -258,7 +258,7 @@ def rain(a, b, level, muffled=False):
     k = np.array([level(x) for x in t[::441]]).repeat(441)[:n]
     x = rng.standard_normal(n)
     x = np.convolve(x - np.convolve(x, np.ones(6) / 6, mode='same'), np.ones(30 if muffled else 3) / (30 if muffled else 3), mode='same')
-    add(amb, x * k * (0.6 + 0.4 * np.sin(2 * np.pi * 0.23 * t) ** 2), a, 0.2 if muffled else 0.13)
+    add(amb, x * k * (0.6 + 0.4 * np.sin(2 * np.pi * 0.23 * t) ** 2), a, 0.16 if muffled else 0.1)
     d = a
     while d < b:
         if rng.random() < level(d - a):
@@ -317,8 +317,8 @@ for s in T['scenes']:
     if 'drop' in c: add(fx, tone(1500, 1200, 0.07, decay=0.03), c['drop'] + 0.85, 0.2)
     if 'open' in c: add(fx, tone(240, 720, 0.28, decay=0.15), c['open'] + 0.05, 0.25); fwip(c['open'] + 0.05, 0.25)
     if sid == 's12': splash(c['w'] + 0.05, 0.8)
-    if 'rumble' in c: thunder(c['rumble'], 0.42)
-    if 'boom' in c: thunder(c['boom'] + 0.1, 0.24)
+    if 'rumble' in c: thunder(c['rumble'], 0.35)
+    if 'boom' in c: thunder(c['boom'] + 0.35, 0.18)   # just after the word "Boom!", so it doesn't cover Pip
     if sid == 's14':   # the wipers, on every swish and in between
         d = c['s1']
         while d < b - 0.3:
@@ -365,7 +365,7 @@ speaking = np.convolve(speaking, np.ones(k) / k, mode='same')
 music *= 1 - 0.75 * speaking   # music drops to a quarter while anyone speaks
 amb *= 1 - 0.8 * speaking    # background sounds drop to a fifth
 
-mix = voices * 0.9 + music * 0.5 + fx + amb
+mix = voices * 0.9 + music * 0.42 + fx + amb
 mix /= max(1e-9, np.max(np.abs(mix))) / 0.89
 
 # Check, scene by scene, while someone is talking: background sounds at least 15 dB and music at least 10 dB under the voices.
@@ -376,7 +376,7 @@ for sc in T['scenes']:
     on = speaking[i:j] > 0.5
     if on.sum() < SR * 0.3: continue
     v = db((voices * 0.9)[i:j][on])
-    for name, x, need in (('background', amb, 15), ('music', music * 0.5, 10)):
+    for name, x, need in (('background', amb, 15), ('music', music * 0.42, 10)):
         gap = v - db(x[i:j][on])
         if gap < need: quiet.append(f"{sc['id']} {name} only {gap:.1f} dB under")
 print('levels OK: background 15+ dB and music 10+ dB under the voices in every scene' if not quiet else 'TOO LOUD: ' + ', '.join(quiet))
