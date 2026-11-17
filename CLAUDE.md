@@ -109,7 +109,8 @@ Published: Ep 1 "Learn Colors" (https://youtu.be/QEoUifHEM8A, 15 Nov 2026; 332 v
 
 ## Ideas for later
 
-- **Planned episodes**: none left (ep 4–10 built). Next ideas below; write the script first and wait for Ramesh's OK. Each script's header lists its colours and the new things to build. To build one: `./new-episode.sh epNN-<slug> "Episode NN - <Title>"` (it keeps the script already in the folder and copies the newest started episode).
+- **Planned episodes**: none left (ep 4–10 built). Next ideas below; write the script first and wait for Ramesh's OK.
+- **Rescue missions** (Ramesh's pick for what's next, from a look at what toddlers watch now): a story series where Sunny and a new helper vehicle rescue a friend. Plan in `cartoon-3d/episodes/rescue-missions-plan.md` (why, the repeated series elements, helpers, 8 episode ideas, the 20-scene shape, pilot first). Gentle only: stuck or lost, never hurt; no flashing siren lights. Each script's header lists its colours and the new things to build. To build one: `./new-episode.sh epNN-<slug> "Episode NN - <Title>"` (it keeps the script already in the folder and copies the newest started episode).
 - More episode ideas: ABC parts 2 and 3 (I–P, Q–Z) · Bath and bedtime routines · Animal sounds (needs new animals; computer voices saying "moo" sound like people) · Days of the week (abstract for ages 2–5).
 - Nepali versions (voices `ne-NP-SagarNeural` / `ne-NP-HemkalaNeural`; Devanagari captions need Noto Sans Devanagari).
 - Shorts (vertical 1080×1920, 20–35 s) cut from each episode's best scene.
