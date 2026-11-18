@@ -1,7 +1,11 @@
 node_modules/
 .venv/
+.DS_Store
 **/out/frames/
 **/out/*.wav
 **/out/*.png
 **/out/*.mp4
+**/out/*.log
+**/out/*.json
+**/out/voice/
 **/clips/
