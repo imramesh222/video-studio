@@ -3,4 +3,5 @@ node_modules/
 **/out/frames/
 **/out/*.wav
 **/out/*.png
+**/out/*.mp4
 **/clips/
